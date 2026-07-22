@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Durable job and workflow orchestration library for .NET. In-process, storage-agnostic, dashboard-included.</Description>
+  </PropertyGroup>
+
+</Project>
