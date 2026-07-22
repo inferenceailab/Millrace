@@ -38,13 +38,14 @@ The gap: nothing modern occupies *"in-process, one NuGet away, jobs + sagas in o
 - G4. Correctness by construction: at-least-once execution, exactly-once *state transitions*, first-class idempotency keys.
 - G5. Multi-node scale-out with no coordinator: lease-based claiming, any node can run any role.
 - G6. Modern .NET only: `net10.0`, C# 14, `System.Text.Json`, `TimeProvider`, `IHostedService`, OpenTelemetry-native.
+- G7. **Self-sufficient core.** No application-framework dependencies — not ABP, not MassTransit, not MediatR. Only the BCL and `Microsoft.Extensions.*` abstractions (DI, hosting, options, logging). Capabilities an app framework would otherwise contribute — multi-tenant context, correlation flow, authorization hooks — are implemented natively in Weft (§8).
 
 **Non-goals (for now)**
 
 - N1. Visual designer — deferred to post-1.0 (the graph model is designed so a designer can be added without re-architecture).
 - N2. Temporal-style deterministic replay — we checkpoint state after every activity instead (see §7.2).
 - N3. Human-task/user-management framework — signals + bookmarks are the primitive; approval UIs are the consumer's domain.
-- N4. Framework couplings (ABP, MassTransit, …) — possible later as satellite packages; core stays plain DI.
+- N4. Framework integrations (ABP, MassTransit, …) — ruled out entirely (§11.7). Weft never takes a dependency on an application framework; whatever it needs from that world (tenancy, audit history, authorization) is built natively in core. Third parties are free to write adapters; we neither ship nor depend on any.
 
 ## 3. Architecture overview
 
@@ -160,7 +161,7 @@ Scheduled ──due──► Enqueued ──claim──► Processing ──┼�
                                            └──────────► Cancelled
 ```
 
-`JobRecord`: id, queue, serialized invocation, state, priority, due time, lease (`WorkerId`, `LeaseUntil`), attempt count, retry policy, idempotency key, correlation (workflow instance/activity, if any), timestamps.
+`JobRecord`: id, queue, serialized invocation, state, priority, due time, lease (`WorkerId`, `LeaseUntil`), attempt count, retry policy, idempotency key, optional tenant id (§8), correlation (workflow instance/activity, if any), timestamps.
 
 ### 5.2 Public API (Hangfire-grade ergonomics)
 
@@ -280,6 +281,7 @@ Consequences (documented rules, enforced where cheap):
 
 - **Serialization:** `System.Text.Json` throughout (args, `TData`, bookmarks). Polymorphism via STJ type discriminators; no `TypeNameHandling`-style CVE surface. Contracts: renaming types/methods used by in-flight jobs is a breaking deploy — documented, with an alias attribute (`[JobAlias]`) as the escape hatch.
 - **Observability:** OpenTelemetry-native — `ActivitySource` spans per job/activity execution (trace context propagated from enqueue site to worker), `Meter` counters/histograms (queue depth, latency, attempts). Dashboard consumes the same counters.
+- **Multi-tenancy (native, optional):** `JobRecord` and `WorkflowInstanceRecord` carry an optional `TenantId`. A pluggable `ITenantContextAccessor` captures the ambient tenant at enqueue/start; workers restore it into the execution scope before resolving the job's target, so consumer code (and its data filters) sees the right tenant. The dashboard API filters by tenant. Single-tenant apps pay nothing — the field stays null. Implemented in core with no framework dependency (G7).
 - **Time:** all scheduling through `TimeProvider` — cron and lease logic unit-testable with `FakeTimeProvider`.
 - **Testing:** conformance kit for providers (§4.4 P4); `Weft.Testing` for consumers (in-memory host, `AdvanceTime`, signal helpers, single-step execution).
 - **Topology:** every node is identical (workers + opportunistic scheduler + optional dashboard). Scale-out = run more nodes against the same store. No leader, no coordinator.
@@ -320,3 +322,4 @@ All open questions resolved 2026-07-23:
 4. **Dashboard: three official UIs — React, Angular, Blazor** — over a single versioned REST + OpenAPI contract (§7). Phased: React (reference, 0.2) → Angular (0.5) → Blazor (1.0). Features are designed once in the contract, rendered three times.
 5. **Signals: strongly typed** (`WaitForSignal<TPayload>` + typed `SignalAsync` overload); JSON wire format keeps webhook/external senders possible; loose `JsonElement` overload as escape hatch.
 6. **Repo: mono-repo** (`src/`, `test/`, `samples/`, `docs/`), GitHub Actions CI, central package management, `net10.0` only. Scaffolded 2026-07-23.
+7. **No application-framework dependencies — ABP explicitly ruled out.** Everything Weft needs that ABP would otherwise provide (multi-tenant context, audit/attempt history, authorization hooks) is implemented natively in core, on the BCL + `Microsoft.Extensions.*` only (G7, N4, §8 multi-tenancy).
