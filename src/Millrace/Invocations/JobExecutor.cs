@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Millrace.Diagnostics;
 using Millrace.Storage;
 using Millrace.Tenancy;
 
@@ -51,9 +53,33 @@ public sealed class JobExecutor(
         await using var scope = scopes.CreateAsyncScope();
         using var tenantScope = tenants.BeginScope(job.TenantId);
 
+        // Continues the trace that enqueued this job, so a request that fired work off in the
+        // background still shows the work in the same trace — the point of §8's propagation.
+        using var activity = MillraceDiagnostics.StartJobActivity(
+            job.Invocation.TypeName, job.Invocation.MethodName, job.TraceParent);
+        activity?.SetTag("millrace.job.id", job.Id.ToString());
+        activity?.SetTag("millrace.job.queue", job.Queue);
+        activity?.SetTag("millrace.job.attempt", job.Attempt);
+        if (job.TenantId is { } tenant)
+        {
+            activity?.SetTag("millrace.job.tenant", tenant);
+        }
+
         var target = scope.ServiceProvider.GetRequiredService(serviceType);
-        var result = method.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, arguments, culture: null);
-        await ((Task)result!).ConfigureAwait(false);
+
+        try
+        {
+            var result = method.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, arguments, culture: null);
+            await ((Task)result!).ConfigureAwait(false);
+        }
+        catch (Exception e)
+        {
+            // Recorded on the span rather than only in the job record: a failure that is invisible
+            // in the trace forces whoever is debugging to correlate two systems by hand.
+            activity?.SetStatus(ActivityStatusCode.Error, e.Message);
+            activity?.AddException(e);
+            throw;
+        }
 
         return scope.ServiceProvider.GetRequiredService<JobSideEffects>();
     }
