@@ -45,6 +45,37 @@ internal sealed class WorkflowClient(
             : JsonSerializer.Deserialize<TData>(instance.DataJson, _options.SerializerOptions);
     }
 
+    public ValueTask<bool> SignalAsync<TPayload>(
+        string name, string correlationId, TPayload payload, CancellationToken ct = default)
+        => SignalAsync(name, correlationId, JsonSerializer.Serialize(payload, _options.SerializerOptions), ct);
+
+    public async ValueTask<bool> SignalAsync(
+        string name, string correlationId, string? payloadJson, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(correlationId);
+
+        // At-most-once by construction: two concurrent senders cannot both consume the bookmark, so
+        // exactly one resumes the wait and the other is told nothing was waiting.
+        var bookmark = await workflows.ConsumeBookmarkAsync(name, correlationId, ct).ConfigureAwait(false);
+        if (bookmark is null)
+        {
+            return false;
+        }
+
+        var instance = await workflows.GetInstanceAsync(bookmark.InstanceId, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException(
+                $"Bookmark '{name}'/'{correlationId}' names instance '{bookmark.InstanceId}', which no longer exists.");
+
+        // The resume runs as a job rather than inline: the bookmark is already gone, so a resume
+        // that failed here would strand the instance with no way to wake it.
+        var resume = WorkflowJobFactory.CreateSignalDelivery(
+            instance, nodeId: string.Empty, name, correlationId, payloadJson, _options, time);
+
+        await jobs.EnqueueAsync([resume], ct).ConfigureAwait(false);
+        return true;
+    }
+
     private async ValueTask<WorkflowInstanceId> StartCoreAsync<TData>(
         WorkflowDefinition definition, TData data, CancellationToken ct)
     {

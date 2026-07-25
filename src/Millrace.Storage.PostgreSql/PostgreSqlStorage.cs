@@ -300,6 +300,11 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
             await ApplyCheckpointAsync(conn, checkpoint, ct).ConfigureAwait(false);
         }
 
+        foreach (var bookmark in transition.Bookmarks)
+        {
+            await InsertBookmarkAsync(conn, bookmark, ct).ConfigureAwait(false);
+        }
+
         foreach (var record in transition.Enqueue)
         {
             await InsertCoreAsync(conn, record, wakeups, ct).ConfigureAwait(false);
@@ -667,6 +672,15 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
         await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await InsertBookmarkAsync(conn, bookmark, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The single bookmark-insert implementation, shared by the standalone call and the
+    /// transition-carried inserts, so the two cannot diverge.
+    /// </summary>
+    private async Task InsertBookmarkAsync(NpgsqlConnection conn, BookmarkRecord bookmark, CancellationToken ct)
+    {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_schema}.bookmarks

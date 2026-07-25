@@ -1,14 +1,14 @@
 namespace Millrace.Workflows;
 
 /// <summary>
-/// The job target every workflow activity runs through.
+/// The job target every workflow activity, resume and timeout runs through.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Activities are not enqueued directly: the substrate enqueues a call to this service, and it
-/// loads the instance, runs the activity, and computes where the graph goes next. That keeps every
-/// activity execution an ordinary Layer 1 job — inheriting retries, leases, distribution and
-/// dashboard visibility — while the graph walk stays in one place.
+/// loads the instance, does the work, and computes where the graph goes next. That keeps every
+/// workflow step an ordinary Layer 1 job — inheriting retries, leases, distribution and dashboard
+/// visibility — while the graph walk stays in one place.
 /// </para>
 /// <para>
 /// Public because the substrate resolves it by name from a serialized invocation. Not intended to
@@ -29,4 +29,26 @@ public interface IWorkflowDispatcher
     /// </param>
     /// <param name="loopIndex">Iteration index, when running a <see cref="WorkflowNodeKind.ForEach"/> body.</param>
     Task ExecuteAsync(Guid instanceId, string nodeId, string? joinKey, int loopIndex, CancellationToken ct);
+
+    /// <summary>
+    /// Resumes an instance whose signal has arrived, binding the payload into the data document and
+    /// continuing past the wait.
+    /// </summary>
+    /// <remarks>
+    /// Runs as a job rather than inline in <c>SignalAsync</c> so the resume inherits retries: the
+    /// bookmark is already consumed by the time this is enqueued, so losing the resume would strand
+    /// the instance.
+    /// </remarks>
+    Task DeliverSignalAsync(
+        Guid instanceId, string signalName, string correlationId, string? payloadJson, CancellationToken ct);
+
+    /// <summary>
+    /// Gives up on a wait whose timeout elapsed, continuing past it without a payload.
+    /// </summary>
+    /// <remarks>
+    /// Races the real signal deliberately, and resolves the race through the same at-most-once
+    /// bookmark consumption: whichever of the two consumes the bookmark wins, and the loser finds
+    /// nothing and does nothing. No extra coordination, and no window where both fire.
+    /// </remarks>
+    Task TimeoutSignalAsync(Guid instanceId, string signalName, string correlationId, CancellationToken ct);
 }

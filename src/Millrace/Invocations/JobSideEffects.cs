@@ -25,6 +25,9 @@ public sealed class JobSideEffects
     /// <summary>Jobs to insert in the same transaction.</summary>
     public List<JobRecord> Enqueue { get; } = [];
 
+    /// <summary>Bookmarks to insert in the same transaction.</summary>
+    public List<BookmarkRecord> Bookmarks { get; } = [];
+
     /// <summary>
     /// Recomputes <see cref="Checkpoint"/> against the current stored state, after another writer
     /// won the revision race.

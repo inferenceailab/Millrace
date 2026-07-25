@@ -25,11 +25,35 @@ public sealed record WorkflowCursor
     public IReadOnlyDictionary<string, WorkflowJoin> Joins { get; init; } =
         new Dictionary<string, WorkflowJoin>(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Open signal waits, keyed <c>signalName|correlationId</c>.
+    /// </summary>
+    /// <remarks>
+    /// The bookmark records that <em>an</em> instance is waiting; this records <em>where</em> it will
+    /// resume. Keeping it here rather than on the bookmark leaves the storage schema alone, and the
+    /// two are written in the same atom anyway, so they cannot disagree.
+    /// </remarks>
+    public IReadOnlyDictionary<string, WorkflowWait> Waits { get; init; } =
+        new Dictionary<string, WorkflowWait>(StringComparer.Ordinal);
+
     /// <summary>True once no activity remains in flight and no join is open.</summary>
     public bool Completed { get; init; }
 
     [JsonIgnore]
     public bool HasOpenJoins => Joins.Count > 0;
+
+    /// <summary>The key a wait is stored under.</summary>
+    public static string WaitKey(string signalName, string correlationId) => $"{signalName}|{correlationId}";
+}
+
+/// <summary>Where a suspended instance continues when its signal arrives, or its wait times out.</summary>
+public sealed record WorkflowWait
+{
+    /// <summary>The <see cref="WorkflowNodeKind.WaitForSignal"/> node that is parked.</summary>
+    public required string NodeId { get; init; }
+
+    /// <summary>The fan-out this wait sits inside, if any.</summary>
+    public string? JoinKey { get; init; }
 }
 
 /// <summary>One open fan-out: how many branches are still running, and where to go after.</summary>
