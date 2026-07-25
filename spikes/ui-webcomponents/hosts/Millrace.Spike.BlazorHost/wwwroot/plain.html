@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Millrace — plain HTML host</title>
+    <link rel="stylesheet" href="millrace.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="masthead">
+        <h1>Millrace</h1>
+        <span class="sub">Plain HTML host — web-component spike (#86)</span>
+      </header>
+
+      <p class="muted">
+        No framework at all. This is the substrate React and Angular both sit on, so what works here
+        is what their bindings ultimately do: an attribute, a property holding a function, and a
+        CustomEvent crossing the shadow boundary.
+      </p>
+
+      <millrace-jobs id="jobs" base="/millrace/api/v1" job-state="Dead" page-size="5"></millrace-jobs>
+
+      <p id="result" class="muted">Nothing selected yet.</p>
+    </div>
+
+    <script type="module">
+      import './millrace-jobs.js'
+
+      const element = document.getElementById('jobs')
+
+      // The extension point Blazor cannot reach: a property holding a render function.
+      element.extraColumns = [
+        { header: 'Failures', numeric: true, render: (job) => String(job.failures) },
+      ]
+
+      element.addEventListener('job-select', (e) => {
+        document.getElementById('result').textContent = `Selected job: ${e.detail.id}`
+      })
+    </script>
+  </body>
+</html>

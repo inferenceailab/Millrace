@@ -1,0 +1,61 @@
+@page "/"
+@rendermode InteractiveServer
+
+<div class="layout">
+    <header class="masthead">
+        <h1>Millrace</h1>
+        <span class="sub">Blazor host — web-component spike (#86)</span>
+    </header>
+
+    <p class="muted">
+        The table below is <code>&lt;millrace-jobs&gt;</code>, the same Lit element the React and
+        Angular hosts render. Everything a Blazor consumer must write to use it is on this page or
+        in the two files marked GLUE.
+    </p>
+
+    @* Attributes are the easy half: strings cross into a custom element with no ceremony, so a
+       filter set from C# works exactly as it would in HTML. *@
+    <div class="controls">
+        <div class="field">
+            <label for="state">State (set from Blazor)</label>
+            <select id="state" @onchange="OnStateChanged">
+                <option value="">Any</option>
+                @foreach (var state in States)
+                {
+                    <option value="@state">@state</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @* `base` is required here and not in the shipping UIs: they are served from the dashboard mount
+       and can infer it; an element living in someone else's page cannot. *@
+    <millrace-jobs base="/millrace/api/v1" job-state="@_state" page-size="10"
+                   @onjobselect="OnJobSelected"></millrace-jobs>
+
+    @if (_selected is not null)
+    {
+        <p>Selected job: <code>@_selected</code> — routed by Blazor, not by the element.</p>
+    }
+
+    <h2>What could not be done from C#</h2>
+    <div class="notice error">
+        <strong>Adding a column.</strong> The element's <code>extraColumns</code> extension point
+        takes objects with a <code>render</code> <em>function</em>. There is no way to supply a
+        JavaScript function from Razor, so this host cannot add a column the way a React or Angular
+        host can — it would have to write JavaScript, or fork the element.
+    </div>
+</div>
+
+@code {
+    private static readonly string[] States =
+        ["Scheduled", "Enqueued", "Processing", "Succeeded", "Failed", "Dead", "Cancelled", "Awaiting"];
+
+    private string _state = string.Empty;
+    private string? _selected;
+
+    private void OnStateChanged(ChangeEventArgs e) => _state = e.Value?.ToString() ?? string.Empty;
+
+    // Reached only because of the two GLUE files. Without them this never fires and nothing says so.
+    private void OnJobSelected(JobSelectEventArgs e) => _selected = e.Id;
+}

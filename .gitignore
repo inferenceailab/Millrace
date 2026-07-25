@@ -487,3 +487,7 @@ $RECYCLE.BIN/
 src/Millrace.Dashboard.Ui.React/ui/dist/
 src/Millrace.Dashboard.Ui.Angular/ui/dist/
 src/Millrace.Dashboard.Ui.Angular/ui/.angular/
+spikes/ui-webcomponents/element/dist/
+spikes/ui-webcomponents/hosts/Millrace.Spike.BlazorHost/wwwroot/millrace-jobs.js
+spikes/ui-webcomponents/hosts/Millrace.Spike.BlazorHost/wwwroot/millrace.css
+.playwright-mcp/

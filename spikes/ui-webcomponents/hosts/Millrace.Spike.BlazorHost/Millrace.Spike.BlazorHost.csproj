@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Deliberately NOT in Millrace.slnx. A spike is evidence, not product: keeping it out means CI does
+    not build it and nobody accidentally depends on it. Build it directly to reproduce the findings;
+    see the spike README for the command.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Millrace.Spike.BlazorHost</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Millrace\Millrace.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Millrace.Dashboard\Millrace.Dashboard.csproj" />
+  </ItemGroup>
+
+</Project>
