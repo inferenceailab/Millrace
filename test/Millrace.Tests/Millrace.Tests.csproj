@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Millrace\Millrace.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Testing\Millrace.Testing.csproj" />
     <ProjectReference Include="..\..\src\Millrace.Storage.Verification\Millrace.Storage.Verification.csproj" />
   </ItemGroup>
 

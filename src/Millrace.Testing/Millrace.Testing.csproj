@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Test harness for applications built on Millrace: an in-memory host that runs jobs and workflows deterministically, with a controllable clock. No polling, no sleeping, no background workers.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Millrace\Millrace.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <!-- A consumer's activity may inject ILogger<T>; without this the harness cannot resolve it. -->
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+</Project>
