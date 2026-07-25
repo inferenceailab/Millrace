@@ -20,10 +20,12 @@ namespace Millrace.Storage.Monitoring;
 /// — no pagination scheme can prevent that, and the contract does not pretend otherwise.
 /// </para>
 /// <para>
-/// <b>Cursors are opaque and provider-defined.</b> A provider MUST reject a cursor it did not issue
-/// — malformed, truncated, or from a different provider — with
-/// <see cref="MillraceStorageException"/>. Silently treating an unrecognized cursor as "start from
-/// the beginning" would turn a client bug into an infinite paging loop.
+/// <b>Cursors are opaque and provider-defined.</b> A provider MUST reject a cursor it cannot decode
+/// — malformed or truncated — with <see cref="MillraceStorageException"/>. Silently treating an
+/// unrecognized cursor as "start from the beginning" would turn a client bug into an infinite paging
+/// loop. Providers sharing an encoding (as the bundled ones do, via
+/// <see cref="MonitoringCursor"/>) will decode each other's cursors; that is harmless, since a
+/// dashboard is bound to one provider and a cursor cannot legitimately cross between them.
 /// </para>
 /// <para>
 /// <b>Tenancy.</b> Every query carries a <see cref="TenantFilter"/>; providers apply it exactly,

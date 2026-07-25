@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using Millrace.Storage.Monitoring;
 
 namespace Millrace.Storage.InMemory;
 
@@ -8,7 +9,7 @@ namespace Millrace.Storage.InMemory;
 /// tests. Explicitly not durable. A single lock serializes every operation, which makes the
 /// atomicity contract trivially true; the value of this implementation is precision, not speed.
 /// </summary>
-public sealed class InMemoryStorage : IJobStorage, IWorkflowStorage, IStorageNotifier
+public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, IStorageNotifier, IMonitoringStorage
 {
     private readonly Lock _gate = new();
     private readonly TimeProvider _time;
