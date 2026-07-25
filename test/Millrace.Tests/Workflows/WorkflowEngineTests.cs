@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Millrace.Storage;
+using Millrace.Storage.Monitoring;
 using Millrace.Workflows;
 using Xunit;
 
@@ -282,10 +283,22 @@ public sealed class WorkflowEngineTests
         var id = await host.Services.GetRequiredService<IWorkflowClient>()
             .StartAsync("fails", new Trace());
 
-        // Give the substrate time to run the failing activity and dead-letter it.
-        await Task.Delay(400);
-
+        // Wait for the activity to have actually run and failed, rather than sleeping long enough
+        // that it probably has.
+        //
+        // The observable is a recorded failure, not a dead job: this host configures eight retries
+        // (they are load-bearing for the merge tests), and their backoff is on a fake clock that
+        // this test deliberately never advances — so the job never dies and waiting for that would
+        // hang. One recorded failure is enough, because the claim under test is that a failing
+        // activity does not checkpoint, and nothing can advance past it however many times it
+        // retries.
         var storage = host.Services.GetRequiredService<IWorkflowStorage>();
+        var monitoring = host.Services.GetRequiredService<IMonitoringStorage>();
+        await Eventually.ObservedAsync(
+            async () => await monitoring.QueryJobsAsync(new JobQuery(), CancellationToken.None),
+            page => page.Items.Any(j => j.Failures > 0),
+            "the failing activity to run and record a failure");
+
         var instance = await storage.GetInstanceAsync(id, CancellationToken.None);
         var data = await DataAsync(host, id);
 
@@ -308,9 +321,13 @@ public sealed class WorkflowEngineTests
         var id = await host.Services.GetRequiredService<IWorkflowClient>()
             .StartAsync("delaying", new Trace());
 
-        // Before the delay elapses the flow has run only up to it.
-        await Task.Delay(200);
-        var midway = await DataAsync(host, id);
+        // Wait for the first step rather than sleeping a guess: on a loaded machine 200ms was not
+        // always enough for it to run, which is what made this flaky (#87). Waiting is safe because
+        // the step *after* the delay cannot run until this test advances the fake clock, so once
+        // "first" is observed the assertion below is racing nothing.
+        var midway = await Eventually.ObservedAsync(
+            () => DataAsync(host, id), d => d.Steps.Count > 0, "the flow to reach the delay");
+
         Assert.Equal(["first"], midway.Steps);
 
         // The wait is a scheduled job, not an in-memory timer, so advancing the clock releases it.
