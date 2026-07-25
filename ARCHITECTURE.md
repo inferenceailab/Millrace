@@ -130,6 +130,7 @@ public interface IMonitoringStorage
     ValueTask<JobStatistics> GetStatisticsAsync(TenantFilter tenant, CancellationToken ct);
     ValueTask<Page<JobSummary>> QueryJobsAsync(JobQuery query, CancellationToken ct);
     ValueTask<Page<WorkflowInstanceSummary>> QueryInstancesAsync(InstanceQuery query, CancellationToken ct);
+    ValueTask<Page<RecurringSummary>> QueryRecurringAsync(RecurringQuery query, CancellationToken ct);
     ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct);   // not GetJobAsync — see below
 }
 
@@ -386,5 +387,10 @@ Dashboard contract questions settled 2026-07-25, before any dashboard code was w
     - **`GetJobDetailsAsync`, not `GetJobAsync`.** The bundled providers implement `IJobStorage` and `IMonitoringStorage` on one class, and C# cannot overload on return type — the sketch's name would have compelled explicit interface implementation in every such provider.
     - **`TenantFilter` replaces `string? tenantId`.** A nullable string has to mean both "every tenant" and "the untenanted scope", which are different result sets wherever both exist; §11.8 already treats the null tenant as a scope of its own. Leaving it to provider interpretation would have guaranteed divergence. `TenantFilter` is `Any | Untenanted | For(id)`.
     - **Summaries deliberately omit payloads.** `JobSummary` carries no serialized arguments and `WorkflowInstanceSummary` no data document. Both routinely hold personal data, and a list view would ship them for every row on every page to render columns that never display them. They appear only in the per-job detail read, which an operator requests explicitly.
+
+16. **`QueryRecurringAsync` added to the read model (2026-07-25).** §7 promises a recurring schedule view, but neither `IJobStorage` (fetch-one and fetch-due only) nor the §11.12 read model could list definitions — the sketch that froze in §11.12 simply had no recurring query. Added rather than deferred, since the view is unbuildable without it.
+    - Ordered **`NextFireTime ASC, Id ASC`** — the one query that reads forwards in time. A schedule view asks what runs next; the job and instance lists ask what just happened.
+    - Recurring ids are consumer-chosen strings, not UUIDv7, so the cursor needs a second encoding keyed on `(timestamp, string)`. Its decoder is named `TryDecodeStringId` rather than overloading `TryDecode`, because two overloads differing only by an `out` type are ambiguous at any `out var` call site — which is how a provider author would write it.
+    - **No last outcome.** `LastFireTime` records when a definition fired, not what happened, and `TryFireRecurringAsync` inserts a job carrying no recurring id, so there is no join in either direction. The view answers *is this schedule live and on time*, not *did last night's run succeed*. Linking fired jobs to definitions changes the frozen job schema and is deferred.
 
     Also recorded: **`JobDetails` exposes interruption and failure *counts*, not a per-attempt timeline.** The 0.1 schema stores `Attempt`, `Failures` and `LastError` only, so "attempt history" in §7 means the counters plus the last exception. `Interruptions` is derived as `Attempt − Failures` — free, thanks to §11.8's split, and enough to tell infrastructure churn apart from failing code. A real timeline needs a new per-attempt table in every provider and is deliberately not in 0.2.

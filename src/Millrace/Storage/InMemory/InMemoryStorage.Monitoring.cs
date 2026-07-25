@@ -96,6 +96,39 @@ public sealed partial class InMemoryStorage
         }
     }
 
+    public ValueTask<Page<RecurringSummary>> QueryRecurringAsync(RecurringQuery query, CancellationToken ct)
+    {
+        var limit = ClampLimit(query.Limit, RecurringQuery.DefaultLimit, RecurringQuery.MaxLimit);
+        var after = DecodeStringCursor(query.Cursor);
+
+        lock (_gate)
+        {
+            var ordered = _recurring.Values
+                .Where(r =>
+                    (query.Queue is null || string.Equals(r.Queue, query.Queue, StringComparison.Ordinal))
+                    && MatchesTenant(r.TenantId, query.Tenant))
+                // Ascending: a schedule view reads forwards in time.
+                .OrderBy(r => r.NextFireTime)
+                .ThenBy(r => r.Id, StringComparer.Ordinal)
+                .ToList();
+
+            if (after is { } cursor)
+            {
+                ordered = ordered.Where(r =>
+                    r.NextFireTime > cursor.Timestamp
+                    || (r.NextFireTime == cursor.Timestamp
+                        && string.CompareOrdinal(r.Id, cursor.Id) > 0)).ToList();
+            }
+
+            var items = ordered.Take(limit).Select(ToSummary).ToList();
+            var next = ordered.Count > limit && items.Count > 0
+                ? MonitoringCursor.Encode(items[^1].NextFireTime, items[^1].Id)
+                : null;
+
+            return ValueTask.FromResult(new Page<RecurringSummary> { Items = items, NextCursor = next });
+        }
+    }
+
     public ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct)
     {
         lock (_gate)
@@ -141,6 +174,22 @@ public sealed partial class InMemoryStorage
         }
 
         return (createdAt, id);
+    }
+
+    private static (DateTimeOffset Timestamp, string Id)? DecodeStringCursor(string? cursor)
+    {
+        if (cursor is null)
+        {
+            return null;
+        }
+
+        if (!MonitoringCursor.TryDecodeStringId(cursor, out var timestamp, out var id))
+        {
+            throw new MillraceStorageException(
+                "The supplied paging cursor was not issued by this provider and cannot be decoded.");
+        }
+
+        return (timestamp, id);
     }
 
     private static bool MatchesTenant(string? tenantId, TenantFilter filter)
@@ -203,6 +252,21 @@ public sealed partial class InMemoryStorage
         Failures = r.Failures,
         TenantId = r.TenantId,
         WorkerId = r.WorkerId,
+    };
+
+    private static RecurringSummary ToSummary(RecurringJobRecord r) => new()
+    {
+        Id = r.Id,
+        Cron = r.Cron,
+        Queue = r.Queue,
+        TypeName = r.Invocation.TypeName,
+        MethodName = r.Invocation.MethodName,
+        Priority = r.Priority,
+        TenantId = r.TenantId,
+        NextFireTime = r.NextFireTime,
+        LastFireTime = r.LastFireTime,
+        CreatedAt = r.CreatedAt,
+        UpdatedAt = r.UpdatedAt,
     };
 
     private static WorkflowInstanceSummary ToSummary(WorkflowInstanceRecord r) => new()

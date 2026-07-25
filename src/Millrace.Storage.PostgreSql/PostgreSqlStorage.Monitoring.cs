@@ -192,6 +192,79 @@ public sealed partial class PostgreSqlStorage
         return BuildPage(rows, limit, s => (s.CreatedAt, s.Id.Value));
     }
 
+    public async ValueTask<Page<RecurringSummary>> QueryRecurringAsync(RecurringQuery query, CancellationToken ct)
+    {
+        await EnsureInitializedAsync(ct).ConfigureAwait(false);
+        var limit = ClampLimit(query.Limit, RecurringQuery.DefaultLimit, RecurringQuery.MaxLimit);
+
+        var filters = new List<string>();
+        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+
+        if (query.Queue is not null)
+        {
+            filters.Add("queue = @queue");
+            cmd.Parameters.AddWithValue("queue", query.Queue);
+        }
+
+        AppendTenant(filters, cmd, query.Tenant);
+
+        if (query.Cursor is not null)
+        {
+            if (!MonitoringCursor.TryDecodeStringId(query.Cursor, out var nextFire, out var id))
+            {
+                throw new MillraceStorageException(
+                    "The supplied paging cursor was not issued by this provider and cannot be decoded.");
+            }
+
+            // Ascending order, so the keyset predicate points forwards.
+            filters.Add("(next_fire_time, id) > (@cursorNextFire, @cursorId)");
+            cmd.Parameters.AddWithValue("cursorNextFire", nextFire);
+            cmd.Parameters.AddWithValue("cursorId", id);
+        }
+
+        cmd.CommandText = $"""
+            SELECT id, cron, queue, invocation, priority, tenant_id,
+                   next_fire_time, last_fire_time, created_at, updated_at
+            FROM {_schema}.recurring
+            WHERE {Where(filters)}
+            ORDER BY next_fire_time ASC, id ASC
+            LIMIT @limit
+            """;
+        cmd.Parameters.AddWithValue("limit", limit + 1);
+
+        var rows = new List<RecurringSummary>();
+        await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var invocation = JsonSerializer.Deserialize<JobInvocation>(reader.GetString(3), Json)!;
+                rows.Add(new RecurringSummary
+                {
+                    Id = reader.GetString(0),
+                    Cron = reader.GetString(1),
+                    Queue = reader.GetString(2),
+                    TypeName = invocation.TypeName,
+                    MethodName = invocation.MethodName,
+                    Priority = reader.GetInt32(4),
+                    TenantId = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    NextFireTime = reader.GetFieldValue<DateTimeOffset>(6),
+                    LastFireTime = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7),
+                    CreatedAt = reader.GetFieldValue<DateTimeOffset>(8),
+                    UpdatedAt = reader.GetFieldValue<DateTimeOffset>(9),
+                });
+            }
+        }
+
+        var hasMore = rows.Count > limit;
+        var items = hasMore ? rows.GetRange(0, limit) : rows;
+        var next = hasMore && items.Count > 0
+            ? MonitoringCursor.Encode(items[^1].NextFireTime, items[^1].Id)
+            : null;
+
+        return new Page<RecurringSummary> { Items = items, NextCursor = next };
+    }
+
     public async ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);

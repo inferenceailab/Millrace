@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Millrace.Dashboard.Endpoints;
 using Millrace.Storage;
 using Millrace.Storage.Monitoring;
 
@@ -61,9 +62,13 @@ public static class MillraceDashboardEndpointRouteBuilderExtensions
 
         var api = endpoints.MapGroup($"{prefix}/api/{MillraceDashboard.ApiVersion}")
             .WithGroupName(MillraceDashboard.DocumentName)
-            .AddEndpointFilter(new DashboardAuthorizationFilter(authorization));
+            // Authorization first: an unauthorized caller must not reach the storage layer at all,
+            // so a rejected cursor cannot become a probe for whether the dashboard exists.
+            .AddEndpointFilter(new DashboardAuthorizationFilter(authorization))
+            .AddEndpointFilter<StorageProblemFilter>();
 
         MapMetaEndpoints(api);
+        api.MapMonitoringEndpoints();
 
         logger.LogInformation(
             "Millrace dashboard mounted at {Prefix}/api/{Version}; OpenAPI document at {Prefix}/openapi/{Document}.json.",
