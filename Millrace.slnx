@@ -6,6 +6,9 @@
     <Project Path="src/Millrace.Dashboard/Millrace.Dashboard.csproj" />
     <Project Path="src/Millrace/Millrace.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Millrace.Sample.Api/Millrace.Sample.Api.csproj" />
+  </Folder>
   <Folder Name="/test/">
     <Project Path="test/Millrace.Storage.PostgreSql.Tests/Millrace.Storage.PostgreSql.Tests.csproj" />
     <Project Path="test/Millrace.Dashboard.Tests/Millrace.Dashboard.Tests.csproj" />
