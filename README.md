@@ -22,7 +22,7 @@ directed, sustained flow that does work.
 | 0.2 | PostgreSQL provider · dashboard REST API + OpenAPI · React UI (read-only) | **done** |
 | 0.3 | Workflow engine core | not started |
 | 0.4 | Sagas, compensation, versioning, management actions | not started |
-| 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | not started |
+| 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | in progress |
 | 1.0 | Hardening, Blazor UI, docs site, benchmarks | not started |
 
 Planned work lives on the [project board](https://github.com/users/inferenceailab/projects/1),

@@ -27,5 +27,12 @@ public interface IWorkflowStorage
     /// At-most-once under arbitrary concurrency (§4.2.4): a signal resumes exactly one waiting
     /// instance.
     /// </summary>
+    /// <remarks>
+    /// Consumes the oldest match. Ties on <see cref="BookmarkRecord.CreatedAt"/> break on the
+    /// bookmark id in <b>byte order</b> — the order a database sorts a uuid column, and the same
+    /// order <c>MonitoringCursor.CompareIds</c> defines. Not <see cref="Guid.CompareTo(Guid)"/>,
+    /// which compares the leading fields in native endianness and therefore differs from every
+    /// provider.
+    /// </remarks>
     ValueTask<BookmarkRecord?> ConsumeBookmarkAsync(string signalName, string correlationId, CancellationToken ct);
 }

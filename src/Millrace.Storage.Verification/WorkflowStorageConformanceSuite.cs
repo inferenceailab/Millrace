@@ -220,12 +220,18 @@ public abstract partial class WorkflowStorageConformanceSuite
         var instance = Instance(time);
         await harness.Workflows.CreateInstanceAsync(instance, CancellationToken.None);
 
-        // Same CreatedAt (time never advances) — the contract's tie-break is the bookmark Id.
+        // Same CreatedAt (time never advances) — the contract's tie-break is the bookmark Id, in
+        // byte order.
+        //
+        // Not Guid.CompareTo: that compares the leading fields in native endianness, which matches
+        // no database's ordering, so an expectation built on it is satisfied or not depending on
+        // which random bits a UUIDv7 happened to get. This fact passed on PostgreSQL for months by
+        // luck, and only failed once a second provider existed to disagree with it.
         var a = Bookmark(time, instance.Id);
         var b = Bookmark(time, instance.Id);
         await harness.Workflows.AddBookmarkAsync(a, CancellationToken.None);
         await harness.Workflows.AddBookmarkAsync(b, CancellationToken.None);
-        var expectedFirst = a.Id.CompareTo(b.Id) < 0 ? a.Id : b.Id;
+        var expectedFirst = Millrace.Storage.Monitoring.MonitoringCursor.CompareIds(a.Id, b.Id) < 0 ? a.Id : b.Id;
         var expectedSecond = expectedFirst == a.Id ? b.Id : a.Id;
 
         var first = await harness.Workflows.ConsumeBookmarkAsync("approval", "order-1", CancellationToken.None);

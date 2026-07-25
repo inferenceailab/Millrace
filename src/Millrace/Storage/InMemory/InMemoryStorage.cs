@@ -426,10 +426,13 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
                     continue;
                 }
 
+                // Byte order, not Guid.CompareTo: the latter compares the first fields in native
+                // endianness, which matches no database, so using it here would make the tiebreak
+                // provider-dependent (§4.2.4).
                 if (oldest is null
                     || bookmark.CreatedAt < oldest.CreatedAt
                     || (bookmark.CreatedAt == oldest.CreatedAt
-                        && bookmark.Id.CompareTo(oldest.Id) < 0))
+                        && Monitoring.MonitoringCursor.CompareIds(bookmark.Id, oldest.Id) < 0))
                 {
                     oldest = bookmark;
                 }
