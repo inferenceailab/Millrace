@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Millrace.Storage.PostgreSql/Millrace.Storage.PostgreSql.csproj" />
+    <Project Path="src/Millrace.Storage.SqlServer/Millrace.Storage.SqlServer.csproj" />
     <Project Path="src/Millrace.Storage.Verification/Millrace.Storage.Verification.csproj" />
     <Project Path="src/Millrace.Dashboard.Ui.React/Millrace.Dashboard.Ui.React.csproj" />
     <Project Path="src/Millrace.Dashboard/Millrace.Dashboard.csproj" />
@@ -12,6 +13,7 @@
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/Millrace.Storage.PostgreSql.Tests/Millrace.Storage.PostgreSql.Tests.csproj" />
+    <Project Path="test/Millrace.Storage.SqlServer.Tests/Millrace.Storage.SqlServer.Tests.csproj" />
     <Project Path="test/Millrace.Dashboard.Tests/Millrace.Dashboard.Tests.csproj" />
     <Project Path="test/Millrace.Tests/Millrace.Tests.csproj" />
   </Folder>

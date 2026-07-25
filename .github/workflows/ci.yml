@@ -13,16 +13,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux runners have Docker, so the PostgreSQL conformance suite must actually run.
-          # If a database cannot be reached the job fails rather than skipping all 70 facts and
-          # still reporting "Test Run Successful".
+          # Linux runners have Docker, so both provider conformance suites must actually run.
+          # If a database cannot be reached the job fails rather than skipping the facts and still
+          # reporting "Test Run Successful".
           - os: ubuntu-latest
             require_postgres: 'true'
-          # Windows runners cannot run Linux containers, so the PostgreSQL suite skips here by
-          # design. Provider coverage comes from the Linux job above. This opt-out is explicit so
-          # the skip is a decision rather than an accident.
+            require_sqlserver: 'true'
+          # Windows runners cannot run Linux containers, so both suites skip here by design.
+          # Provider coverage comes from the Linux job above. These opt-outs are explicit so the
+          # skips are decisions rather than accidents.
           - os: windows-latest
             require_postgres: 'false'
+            require_sqlserver: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -41,4 +43,5 @@ jobs:
         env:
           # Absent this, the harness falls back to CI being set, which is also strict.
           MILLRACE_REQUIRE_POSTGRES: ${{ matrix.require_postgres }}
+          MILLRACE_REQUIRE_SQLSERVER: ${{ matrix.require_sqlserver }}
         run: dotnet test --no-build --configuration Release --verbosity normal
