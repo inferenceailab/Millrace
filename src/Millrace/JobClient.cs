@@ -164,6 +164,10 @@ public sealed class JobClient(
             TenantId = original.TenantId,
             CreatedAt = time.GetUtcNow(),
             RequeuedFrom = original.Id,
+            // Carried, unlike ParentId below: this is provenance, not a live reference. Re-running a
+            // fired occurrence is still that schedule's work, and dropping the link would quietly
+            // remove the retry from the schedule's history.
+            RecurringId = original.RecurringId,
             // Not copied: ParentId, WorkflowInstanceId and ActivityNodeId. A requeue is a fresh
             // piece of work, not a continuation or a workflow step — reattaching it to either would
             // make it advance state that has already moved on.
@@ -199,6 +203,10 @@ public sealed class JobClient(
                     Retry = definition.Retry,
                     TenantId = definition.TenantId,
                     CreatedAt = now,
+                    // Linked like any other occurrence: an operator-triggered run is still this
+                    // definition's run, and hiding it from the schedule's history would make the
+                    // last outcome lie by omission.
+                    RecurringId = definition.Id,
                 },
             ],
             ct).ConfigureAwait(false);

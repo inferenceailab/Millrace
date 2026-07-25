@@ -254,8 +254,20 @@ public sealed partial class InMemoryStorage
         WorkerId = r.WorkerId,
     };
 
-    private static RecurringSummary ToSummary(RecurringJobRecord r) => new()
+    private RecurringSummary ToSummary(RecurringJobRecord r)
     {
+        // The most recently *created* job this definition produced, not the most recently finished:
+        // an occurrence still running must read Processing rather than showing last night''s success
+        // and implying the current run is fine.
+        var latest = _jobs.Values
+            .Select(entry => entry.Record)
+            .Where(job => string.Equals(job.RecurringId, r.Id, StringComparison.Ordinal))
+            .OrderByDescending(job => job.CreatedAt)
+            .ThenByDescending(job => job.Id.Value)
+            .FirstOrDefault();
+
+        return new RecurringSummary
+        {
         Id = r.Id,
         Cron = r.Cron,
         Queue = r.Queue,
@@ -267,7 +279,10 @@ public sealed partial class InMemoryStorage
         LastFireTime = r.LastFireTime,
         CreatedAt = r.CreatedAt,
         UpdatedAt = r.UpdatedAt,
-    };
+            LastOutcome = latest?.State,
+            LastJobId = latest?.Id,
+        };
+    }
 
     private static WorkflowInstanceSummary ToSummary(WorkflowInstanceRecord r) => new()
     {

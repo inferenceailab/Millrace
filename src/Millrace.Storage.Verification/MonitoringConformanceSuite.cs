@@ -393,6 +393,97 @@ public abstract class MonitoringConformanceSuite
     }
 
     [Fact]
+    public async Task A_definition_that_has_never_fired_reports_no_last_outcome()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+
+        await harness.Jobs.UpsertRecurringAsync(
+            Recurring("never", time.GetUtcNow().AddHours(1), time), CancellationToken.None);
+
+        var page = await harness.Monitoring.QueryRecurringAsync(new RecurringQuery(), CancellationToken.None);
+
+        // Null means "has produced no job", not "unknown" — for a definition whose next fire time
+        // is long past, that absence is itself the answer (§11.26).
+        Assert.Null(Assert.Single(page.Items).LastOutcome);
+        Assert.Null(page.Items[0].LastJobId);
+    }
+
+    [Fact]
+    public async Task The_last_outcome_is_the_state_of_the_most_recently_created_fired_job()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var now = time.GetUtcNow();
+
+        await harness.Jobs.UpsertRecurringAsync(Recurring("nightly", now.AddHours(1), time), CancellationToken.None);
+
+        var older = Job(time) with { RecurringId = "nightly", CreatedAt = now.AddHours(-2) };
+        var newer = Job(time) with { RecurringId = "nightly", CreatedAt = now.AddHours(-1) };
+        var unrelated = Job(time) with { CreatedAt = now };
+        await harness.Jobs.EnqueueAsync([older, newer, unrelated], CancellationToken.None);
+
+        // Driven through claim-and-apply rather than inserted terminal, because §4.2 refuses a
+        // terminal state on insert — a job may only reach one by finishing.
+        var claimed = await ClaimAllAsync(harness);
+        await FinishAsync(harness, claimed.Single(c => c.Id == older.Id), JobState.Succeeded);
+        await FinishAsync(harness, claimed.Single(c => c.Id == newer.Id), JobState.Dead);
+        await FinishAsync(harness, claimed.Single(c => c.Id == unrelated.Id), JobState.Succeeded);
+
+        var page = await harness.Monitoring.QueryRecurringAsync(new RecurringQuery(), CancellationToken.None);
+        var summary = Assert.Single(page.Items);
+
+        Assert.Equal(JobState.Dead, summary.LastOutcome);
+        Assert.Equal(newer.Id, summary.LastJobId);
+    }
+
+    [Fact]
+    public async Task A_running_occurrence_outranks_an_earlier_success()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var now = time.GetUtcNow();
+
+        await harness.Jobs.UpsertRecurringAsync(Recurring("nightly", now.AddHours(1), time), CancellationToken.None);
+
+        // Ordered by creation rather than completion, deliberately: a finished-last ordering would
+        // show last night's success while tonight's run is still going, which is the one answer an
+        // operator must not be given.
+        var finished = Job(time) with { RecurringId = "nightly", CreatedAt = now.AddHours(-2) };
+        var running = Job(time) with { RecurringId = "nightly", CreatedAt = now.AddHours(-1) };
+        await harness.Jobs.EnqueueAsync([finished, running], CancellationToken.None);
+
+        // Both are claimed; only one is finished. The other stays Processing — the occurrence still
+        // in flight.
+        var claimed = await ClaimAllAsync(harness);
+        await FinishAsync(harness, claimed.Single(c => c.Id == finished.Id), JobState.Succeeded);
+
+        var summary = Assert.Single(
+            (await harness.Monitoring.QueryRecurringAsync(new RecurringQuery(), CancellationToken.None)).Items);
+
+        Assert.Equal(JobState.Processing, summary.LastOutcome);
+    }
+
+    [Fact]
+    public async Task The_link_to_a_definition_survives_the_definition_being_removed()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+
+        await harness.Jobs.UpsertRecurringAsync(
+            Recurring("gone", time.GetUtcNow().AddHours(1), time), CancellationToken.None);
+        var fired = Job(time) with { RecurringId = "gone" };
+        await harness.Jobs.EnqueueAsync([fired], CancellationToken.None);
+
+        await harness.Jobs.RemoveRecurringAsync("gone", CancellationToken.None);
+
+        // Provenance, not a live reference: the job records which definition produced it and must
+        // outlive that definition rather than dangle or cascade.
+        var stored = await harness.Jobs.GetJobAsync(fired.Id, CancellationToken.None);
+        Assert.Equal("gone", stored!.RecurringId);
+    }
+
+    [Fact]
     public async Task Recurring_paging_walks_every_definition_exactly_once()
     {
         var time = NewTime();
@@ -496,6 +587,39 @@ public abstract class MonitoringConformanceSuite
         Assert.Equal(next, summary.NextFireTime);
         // Never fired yet, and there is no outcome field to populate even after it does.
         Assert.Null(summary.LastFireTime);
+    }
+
+    private const string ConformanceWorker = "conformance-worker";
+
+    /// <summary>
+    /// Claims everything claimable in one request, under one worker.
+    /// </summary>
+    /// <remarks>
+    /// One claim rather than one per job: a claim takes whatever is available, so claiming twice
+    /// leaves the second call nothing to find. Anything left unfinished afterwards stays
+    /// <see cref="JobState.Processing"/>, which is how a fact stages a job that is still running.
+    /// </remarks>
+    private static async Task<IReadOnlyList<JobRecord>> ClaimAllAsync(IStorageHarness harness)
+        => await harness.Jobs.ClaimAsync(
+            new ClaimRequest(ConformanceWorker, ["default"], MaxCount: 100, TimeSpan.FromMinutes(5)),
+            CancellationToken.None);
+
+    /// <summary>Finishes a claimed job — the only way the contract lets one reach a terminal state.</summary>
+    private static async Task FinishAsync(IStorageHarness harness, JobRecord claimed, JobState target)
+    {
+        var applied = await harness.Jobs.ApplyAsync(
+            new JobTransition
+            {
+                JobId = claimed.Id,
+                ExpectedWorkerId = ConformanceWorker,
+                ExpectedAttempt = claimed.Attempt,
+                TargetState = target,
+                Failures = target == JobState.Dead ? claimed.Failures + 1 : claimed.Failures,
+                FinishedAt = claimed.CreatedAt,
+            },
+            CancellationToken.None);
+
+        Assert.True(applied, $"the fence rejected a transition to {target} while staging a fact");
     }
 
     private static RecurringJobRecord Recurring(

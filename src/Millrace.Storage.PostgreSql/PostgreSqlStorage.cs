@@ -23,7 +23,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         "id, queue, state, priority, invocation, retry, created_at, due_at, worker_id, " +
         "lease_until, attempt, failures, cancel_requested, idempotency_key, tenant_id, " +
         "parent_id, last_error, finished_at, workflow_instance_id, activity_node_id, requeued_from, " +
-        "trace_parent";
+        "trace_parent, recurring_id";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.General);
 
@@ -75,9 +75,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 last_error text,
                 finished_at timestamptz,
                 workflow_instance_id uuid,
-                activity_node_id text,
-                requeued_from uuid,
-                trace_parent text);
+                activity_node_id text);
             CREATE UNIQUE INDEX IF NOT EXISTS ux_jobs_active_key
                 ON {_schema}.jobs (tenant_id, idempotency_key) NULLS NOT DISTINCT
                 WHERE idempotency_key IS NOT NULL AND state IN ({ActiveStates});
@@ -132,6 +130,21 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 ON {_schema}.workflow_instances (created_at DESC, id DESC);
             CREATE INDEX IF NOT EXISTS ix_instances_monitor_state
                 ON {_schema}.workflow_instances (state, created_at DESC, id DESC);
+
+            -- Columns added after 0.1 (§11.25). They live here rather than in CREATE TABLE because
+            -- CREATE TABLE IF NOT EXISTS does nothing at all to a table that already exists: a
+            -- column added to that statement reaches new databases and silently never reaches
+            -- upgraded ones, which is how requeued_from and trace_parent shipped in 0.4 unable to
+            -- load on any 0.3 database. One place per column, and it is this one.
+            ALTER TABLE {_schema}.jobs ADD COLUMN IF NOT EXISTS requeued_from uuid;
+            ALTER TABLE {_schema}.jobs ADD COLUMN IF NOT EXISTS trace_parent text;
+            ALTER TABLE {_schema}.jobs ADD COLUMN IF NOT EXISTS recurring_id text;
+
+            -- Partial: only fired jobs carry a recurring id, and there are few definitions, so this
+            -- indexes a small slice and leaves the claim path's main table untouched (§11.26).
+            CREATE INDEX IF NOT EXISTS ix_jobs_recurring
+                ON {_schema}.jobs (recurring_id, created_at DESC, id DESC)
+                WHERE recurring_id IS NOT NULL;
             """;
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         _initialized = true;
@@ -832,7 +845,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                     INSERT INTO {_schema}.jobs ({JobColumns})
                     VALUES (@id, @queue, @state, @priority, @invocation, @retry, @created, @due,
                             @worker, @lease, @attempt, @failures, @cancel, @key, @tenant,
-                            @parent, @error, @finished, @wf, @activity, @requeued, @trace)
+                            @parent, @error, @finished, @wf, @activity, @requeued, @trace, @recurring)
                     {conflict}
                     RETURNING id
                     """;
@@ -858,6 +871,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 cmd.Parameters.AddWithValue("activity", Db(effective.ActivityNodeId));
         cmd.Parameters.AddWithValue("requeued", Db(effective.RequeuedFrom?.Value));
         cmd.Parameters.AddWithValue("trace", Db(effective.TraceParent));
+        cmd.Parameters.AddWithValue("recurring", Db(effective.RecurringId));
 
                 if (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is Guid inserted)
                 {
@@ -978,6 +992,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         ActivityNodeId = reader.IsDBNull(19) ? null : reader.GetString(19),
         RequeuedFrom = reader.IsDBNull(20) ? null : new JobId(reader.GetGuid(20)),
         TraceParent = reader.IsDBNull(21) ? null : reader.GetString(21),
+        RecurringId = reader.IsDBNull(22) ? null : reader.GetString(22),
     };
 
     private static RecurringJobRecord ReadRecurring(NpgsqlDataReader reader) => new()

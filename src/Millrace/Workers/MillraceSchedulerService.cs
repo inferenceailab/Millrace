@@ -79,6 +79,10 @@ internal sealed class MillraceSchedulerService(
                 CreatedAt = now,
                 Retry = record.Retry,
                 TenantId = record.TenantId,
+                // The link that makes "did last night's run succeed" answerable (§11.26). Carried on
+                // the job rather than denormalised onto the definition, because the outcome is only
+                // known when the job finishes and the definition is not in that transaction.
+                RecurringId = record.Id,
             };
 
             // Losing the CAS is the normal multi-node outcome — another node fired it.

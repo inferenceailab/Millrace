@@ -4,11 +4,9 @@ namespace Millrace.Storage.Monitoring;
 /// A recurring definition as shown in the schedule view.
 /// </summary>
 /// <remarks>
-/// <b>There is no last outcome.</b> <see cref="LastFireTime"/> records <em>when</em> a definition
-/// last fired, not what happened: nothing links a fired job back to the definition that produced
-/// it, so the outcome cannot be derived in either direction. Adding that link changes the frozen
-/// job schema and is tracked separately. What this type does answer — is the schedule live, and is
-/// it on time — is the question the view is opened for.
+/// Answers both questions an operator opens the view for: <em>is this schedule live and on time</em>
+/// (<see cref="NextFireTime"/>, and whether it is already past), and <em>did the last run work</em>
+/// (<see cref="LastOutcome"/>, via <see cref="JobRecord.RecurringId"/> — §11.26).
 /// </remarks>
 public sealed record RecurringSummary
 {
@@ -39,6 +37,26 @@ public sealed record RecurringSummary
 
     /// <summary>When it last fired; null if it never has.</summary>
     public DateTimeOffset? LastFireTime { get; init; }
+
+    /// <summary>
+    /// What became of the most recently created job this definition produced, or null if it has
+    /// produced none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The <em>most recently created</em> job, not the most recently finished: an occurrence still
+    /// running should read <see cref="JobState.Processing"/> rather than showing last night's
+    /// success and implying the current run is fine.
+    /// </para>
+    /// <para>
+    /// Null is not "unknown" — it means this definition has never produced a job, which for a
+    /// definition whose <see cref="NextFireTime"/> is long past is itself the answer.
+    /// </para>
+    /// </remarks>
+    public JobState? LastOutcome { get; init; }
+
+    /// <summary>The job behind <see cref="LastOutcome"/>, so the view can link to its error.</summary>
+    public JobId? LastJobId { get; init; }
 
     public required DateTimeOffset CreatedAt { get; init; }
 

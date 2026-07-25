@@ -223,12 +223,28 @@ public sealed partial class PostgreSqlStorage
             cmd.Parameters.AddWithValue("cursorId", id);
         }
 
+        // The last outcome comes from a LATERAL rather than a join or a subquery per column: it
+        // reads one row per definition through ix_jobs_recurring, and definitions are few, so the
+        // schedule view stays a single round trip. Ordered by creation, not completion — an
+        // occurrence still running must read Processing rather than showing last night's success
+        // (§11.26).
         cmd.CommandText = $"""
-            SELECT id, cron, queue, invocation, priority, tenant_id,
-                   next_fire_time, last_fire_time, created_at, updated_at
-            FROM {_schema}.recurring
+            SELECT r.id, r.cron, r.queue, r.invocation, r.priority, r.tenant_id,
+                   r.next_fire_time, r.last_fire_time, r.created_at, r.updated_at,
+                   last_job.last_state, last_job.last_id
+            FROM {_schema}.recurring r
+            LEFT JOIN LATERAL (
+                -- Aliased rather than bare: the filter and cursor predicates are built by helpers
+                -- shared with the other list queries and use unqualified column names, so exposing
+                -- a second `id` here would make those silently ambiguous.
+                SELECT j.id AS last_id, j.state AS last_state
+                FROM {_schema}.jobs j
+                WHERE j.recurring_id = r.id
+                ORDER BY j.created_at DESC, j.id DESC
+                LIMIT 1
+            ) AS last_job ON TRUE
             WHERE {Where(filters)}
-            ORDER BY next_fire_time ASC, id ASC
+            ORDER BY r.next_fire_time ASC, r.id ASC
             LIMIT @limit
             """;
         cmd.Parameters.AddWithValue("limit", limit + 1);
@@ -252,6 +268,8 @@ public sealed partial class PostgreSqlStorage
                     LastFireTime = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7),
                     CreatedAt = reader.GetFieldValue<DateTimeOffset>(8),
                     UpdatedAt = reader.GetFieldValue<DateTimeOffset>(9),
+                    LastOutcome = reader.IsDBNull(10) ? null : (JobState)reader.GetInt32(10),
+                    LastJobId = reader.IsDBNull(11) ? null : new JobId(reader.GetGuid(11)),
                 });
             }
         }

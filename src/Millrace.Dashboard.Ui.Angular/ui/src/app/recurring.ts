@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { api } from '../../../../ui-shared/api';
 import {
   asyncSignal,
+  Chip,
   CursorStack,
   dueText,
   ErrorNotice,
@@ -15,7 +16,7 @@ import {
 @Component({
   selector: 'mr-recurring',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ErrorNotice, Loading, Pager],
+  imports: [Chip, ErrorNotice, Loading, Pager],
   template: `
     @if (result().loading) {
       <mr-loading />
@@ -36,6 +37,7 @@ import {
               <th>Queue</th>
               <th>Next fire</th>
               <th>Last fired</th>
+              <th>Last outcome</th>
               <th></th>
             </tr>
           </thead>
@@ -56,6 +58,13 @@ import {
                 </td>
                 <td>{{ time(definition.lastFireTime) }}</td>
                 <td>
+                  @if (definition.lastOutcome; as outcome) {
+                    <a [href]="'#/jobs/' + definition.lastJobId"><mr-chip [state]="outcome" /></a>
+                  } @else {
+                    <span class="muted">never run</span>
+                  }
+                </td>
+                <td>
                   <button type="button" (click)="trigger(definition.id)" [disabled]="busy()">
                     Run now
                   </button>
@@ -66,7 +75,7 @@ import {
               </tr>
             } @empty {
               <tr>
-                <td colspan="6" class="muted">No recurring definitions.</td>
+                <td colspan="7" class="muted">No recurring definitions.</td>
               </tr>
             }
           </tbody>
@@ -81,8 +90,8 @@ import {
       />
       <p class="muted" style="margin-top: 12px">
         Running now adds an extra occurrence and leaves the schedule alone — the next fire time is
-        unchanged. Last fired records when a definition ran, not whether it succeeded: fired jobs
-        carry no link back to their definition, so the outcome cannot be shown here.
+        unchanged. Last outcome is the most recently <em>created</em> run, so an occurrence still
+        going shows as running rather than reporting the previous night's result.
       </p>
     }
   `,

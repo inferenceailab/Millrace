@@ -122,8 +122,16 @@ export interface RecurringSummary {
   priority: number
   tenantId: string | null
   nextFireTime: string
-  /** When it last fired — not what happened. No outcome is stored; see issue #61. */
+  /** When it last fired. What happened is `lastOutcome`. */
   lastFireTime: string | null
+  /**
+   * What became of the most recently *created* job this definition produced, or null if it has
+   * produced none. Creation order, not completion: a run still going reads `Processing` rather than
+   * showing last night's success.
+   */
+  lastOutcome: JobState | null
+  /** The job behind `lastOutcome`, so the view can link to its error. */
+  lastJobId: string | null
   createdAt: string
   updatedAt: string
 }
