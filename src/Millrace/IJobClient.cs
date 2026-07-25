@@ -90,4 +90,32 @@ public interface IJobClient
     /// </para>
     /// </remarks>
     ValueTask<JobId?> RequeueAsync(JobId id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Enqueues a batch in one round trip and one transaction, returning the effective ids
+    /// positionally.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// All-or-nothing: every job lands or none does. A partially-enqueued fan-out is worse than
+    /// none, because the caller cannot tell which half landed and retrying duplicates the rest.
+    /// </para>
+    /// <para>
+    /// Ids are returned by position, and a position whose idempotency key was already held returns
+    /// the existing job's id rather than a new one — the same rule a single enqueue follows
+    /// (§4.2.6).
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var batch = new JobBatch();
+    /// foreach (var id in orderIds)
+    /// {
+    ///     batch.Enqueue&lt;IEmailSender&gt;(s =&gt; s.SendAsync(id));
+    /// }
+    ///
+    /// await jobs.EnqueueBatchAsync(batch);
+    /// </code>
+    /// </example>
+    ValueTask<IReadOnlyList<JobId>> EnqueueBatchAsync(JobBatch batch, CancellationToken ct = default);
 }
