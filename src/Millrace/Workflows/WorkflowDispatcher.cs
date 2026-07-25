@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Millrace.Invocations;
@@ -143,11 +144,55 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             public async Task AdvanceAsync(
                 WorkflowNode node, TData data, WorkflowCursor cursor, int loopIndex, CancellationToken ct)
             {
+                Compute(node, data, instance, cursor);
+
+                // How the losing side of a checkpoint race gets back to a valid merge without
+                // re-running its activity: the produced document is rebased onto whatever the winner
+                // left, and the join countdown is recomputed from the winner's cursor.
+                var producedJson = JsonSerializer.Serialize(data, owner._json);
+                var originalJson = instance.DataJson;
+
+                owner._effects.Remerge = async remergeCt =>
+                {
+                    var latest = await owner._workflows
+                        .GetInstanceAsync(instance.Id, remergeCt).ConfigureAwait(false);
+                    if (latest is null)
+                    {
+                        return false;
+                    }
+
+                    var merged = JsonMerge.Apply(
+                        JsonNode.Parse(originalJson),
+                        JsonNode.Parse(producedJson),
+                        JsonNode.Parse(latest.DataJson));
+
+                    var mergedData = merged.Deserialize<TData>(owner._json)
+                        ?? throw new InvalidOperationException(
+                            $"Merging workflow instance '{instance.Id}' produced a null document.");
+
+                    var latestCursor = latest.CursorJson is null
+                        ? new WorkflowCursor()
+                        : JsonSerializer.Deserialize<WorkflowCursor>(latest.CursorJson, owner._json)
+                          ?? new WorkflowCursor();
+
+                    _next.Clear();
+                    owner._effects.Enqueue.Clear();
+                    Compute(node, mergedData, latest, latestCursor);
+                    return true;
+                };
+
+                await Task.CompletedTask.ConfigureAwait(false);
+            }
+
+            /// <summary>Routes from <paramref name="node"/> and publishes the resulting checkpoint.</summary>
+            private void Compute(
+                WorkflowNode node, TData data, WorkflowInstanceRecord basis, WorkflowCursor cursor)
+            {
                 var joins = new Dictionary<string, WorkflowJoin>(cursor.Joins, StringComparer.Ordinal);
-                Route(node, data, joins, loopIndex);
+                Route(node, data, joins, loopIndex: 0);
 
                 var completed = _next.Count == 0 && joins.Count == 0;
-                var updated = instance with
+                var updated = basis with
                 {
                     DataJson = JsonSerializer.Serialize(data, owner._json),
                     CursorJson = JsonSerializer.Serialize(
@@ -159,11 +204,9 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                 owner._effects.Checkpoint = new WorkflowCheckpoint
                 {
                     Instance = updated,
-                    ExpectedRevision = instance.Revision,
+                    ExpectedRevision = basis.Revision,
                 };
                 owner._effects.Enqueue.AddRange(_next);
-
-                await Task.CompletedTask.ConfigureAwait(false);
             }
 
             /// <summary>

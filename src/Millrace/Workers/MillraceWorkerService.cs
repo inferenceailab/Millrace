@@ -171,8 +171,7 @@ internal sealed class MillraceWorkerService(
             try
             {
                 var effects = await executor.ExecuteAsync(job, inFlight.Cts.Token).ConfigureAwait(false);
-                await ApplyTransitionAsync(Terminal(job, JobState.Succeeded, job.Failures,
-                    error: null, activateContinuations: true, effects: effects)).ConfigureAwait(false);
+                await ApplyWithRemergeAsync(job, effects).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (inFlight.Cts.IsCancellationRequested)
             {
@@ -380,6 +379,53 @@ internal sealed class MillraceWorkerService(
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    /// <summary>
+    /// Applies a successful job's transition, rebasing its checkpoint if another writer wins the
+    /// revision race.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Retrying the transition unchanged would conflict forever — the revision it expects is already
+    /// gone. So a conflict asks the side effects to recompute against current state and applies the
+    /// rebased transition instead. The activity is not re-executed, which is what §6.2 requires of a
+    /// checkpoint conflict.
+    /// </para>
+    /// <para>
+    /// Bounded: a heavily contended instance must eventually fail the job rather than spin holding a
+    /// lease. Exhausting the attempts falls through to ordinary failure handling, where the retry
+    /// policy takes over and the activity does run again.
+    /// </para>
+    /// </remarks>
+    private async Task ApplyWithRemergeAsync(JobRecord job, JobSideEffects effects)
+    {
+        const int MaxRemerges = 5;
+
+        for (var attempt = 0; ; attempt++)
+        {
+            var transition = Terminal(
+                job, JobState.Succeeded, job.Failures, error: null,
+                activateContinuations: true, effects: effects);
+
+            try
+            {
+                await storage.ApplyAsync(transition, CancellationToken.None).ConfigureAwait(false);
+                return;
+            }
+            catch (MillraceStorageException e) when (
+                effects.Remerge is not null && attempt < MaxRemerges)
+            {
+                logger.LogDebug(
+                    e, "Checkpoint for job {JobId} lost the revision race (attempt {Attempt}); re-merging.",
+                    job.Id, attempt + 1);
+
+                if (!await effects.Remerge(CancellationToken.None).ConfigureAwait(false))
+                {
+                    throw;
+                }
+            }
         }
     }
 
