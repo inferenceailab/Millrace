@@ -25,5 +25,22 @@ public sealed class JobSideEffects
     /// <summary>Jobs to insert in the same transaction.</summary>
     public List<JobRecord> Enqueue { get; } = [];
 
+    /// <summary>
+    /// Recomputes <see cref="Checkpoint"/> against the current stored state, after another writer
+    /// won the revision race.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Supplied by the workflow engine. Without it a losing branch could only reach its merge again
+    /// by failing and being retried, which re-executes the activity — the thing §6.2 explicitly says
+    /// must not happen. With it the worker re-merges and re-applies, and the activity runs once.
+    /// </para>
+    /// <para>
+    /// Returns false when the conflict is not recoverable — the instance vanished, or its revision
+    /// moved somewhere the merge cannot be rebased onto — in which case the job fails normally.
+    /// </para>
+    /// </remarks>
+    public Func<CancellationToken, ValueTask<bool>>? Remerge { get; set; }
+
     internal bool IsEmpty => Checkpoint is null && Enqueue.Count == 0;
 }

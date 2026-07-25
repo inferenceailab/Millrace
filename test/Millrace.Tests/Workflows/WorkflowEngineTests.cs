@@ -20,10 +20,21 @@ public sealed class WorkflowEngineTests
 {
     public sealed class Trace
     {
+        /// <summary>Ordered trace. Only written by steps that run alone — see <see cref="Done"/>.</summary>
         public List<string> Steps { get; set; } = [];
+
+        /// <summary>
+        /// Where concurrent branches record themselves.
+        /// </summary>
+        /// <remarks>
+        /// A dictionary, not a list, because §11.17's merge is per-property: two branches writing
+        /// distinct keys both survive, whereas two branches appending to a list would each replace
+        /// the other's array wholesale. This is the "write disjoint regions" discipline in practice.
+        /// </remarks>
+        public Dictionary<string, bool> Done { get; set; } = [];
+
         public List<string> Items { get; set; } = ["x", "y", "z"];
         public bool TakeBranch { get; set; }
-        public int Counter { get; set; }
     }
 
     public abstract class Step(string name) : IActivity<Trace>
@@ -41,20 +52,25 @@ public sealed class WorkflowEngineTests
     public sealed class OnFalse : Step { public OnFalse() : base("false") { } }
     public sealed class Last : Step { public Last() : base("last") { } }
 
-    public sealed class BranchA : Step { public BranchA() : base("A") { } }
-    public sealed class BranchB : Step { public BranchB() : base("B") { } }
+    /// <summary>A concurrent branch: records itself under its own key.</summary>
+    public abstract class Branch(string key) : IActivity<Trace>
+    {
+        public Task ExecuteAsync(ActivityContext<Trace> context, CancellationToken ct)
+        {
+            context.Data.Done[key] = true;
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class BranchA : Branch { public BranchA() : base("A") { } }
+    public sealed class BranchB : Branch { public BranchB() : base("B") { } }
 
     /// <summary>Records the index it was given, which is how a ForEach body reaches its item.</summary>
     public sealed class PerItem : IActivity<Trace>
     {
         public Task ExecuteAsync(ActivityContext<Trace> context, CancellationToken ct)
         {
-            lock (context.Data)
-            {
-                context.Data.Steps.Add($"item:{context.Data.Items[context.LoopIndex]}");
-                context.Data.Counter++;
-            }
-
+            context.Data.Done[context.Data.Items[context.LoopIndex]] = true;
             return Task.CompletedTask;
         }
     }
@@ -228,13 +244,12 @@ public sealed class WorkflowEngineTests
         await WaitForCompletionAsync(host, time, id);
         var data = await DataAsync(host, id);
 
-        Assert.Equal("first", data.Steps[0]);
-        Assert.Contains("A", data.Steps);
-        Assert.Contains("B", data.Steps);
-        // The join is the point: "last" runs exactly once, after both branches, never twice.
-        Assert.Equal("last", data.Steps[^1]);
-        Assert.Single(data.Steps, s => s == "last");
-        Assert.Equal(4, data.Steps.Count);
+        // Both branches' disjoint edits survived the merge.
+        Assert.True(data.Done.GetValueOrDefault("A"));
+        Assert.True(data.Done.GetValueOrDefault("B"));
+
+        // The join is the point: "last" runs once, after both branches, never twice.
+        Assert.Equal(["first", "last"], data.Steps);
     }
 
     [Fact]
@@ -249,14 +264,13 @@ public sealed class WorkflowEngineTests
         await WaitForCompletionAsync(host, time, id);
         var data = await DataAsync(host, id);
 
-        Assert.Equal(3, data.Counter);
+        // Every iteration ran, and each wrote its own key so none overwrote another.
         foreach (var item in new[] { "x", "y", "z" })
         {
-            Assert.Contains($"item:{item}", data.Steps);
+            Assert.True(data.Done.GetValueOrDefault(item), $"iteration '{item}' did not record itself");
         }
 
-        Assert.Single(data.Steps, s => s == "last");
-        Assert.Equal("last", data.Steps[^1]);
+        Assert.Equal(["first", "last"], data.Steps);
     }
 
     [Fact]
