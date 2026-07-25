@@ -22,7 +22,7 @@ jobs:
           # design. Provider coverage comes from the Linux job above. This opt-out is explicit so
           # the skip is a decision rather than an accident.
           - os: windows-latest
-            require_postgres: 'false'
+            require_postgres: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
