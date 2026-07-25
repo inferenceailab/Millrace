@@ -127,22 +127,22 @@ public interface IStorageNotifier
 /// Separate interface, but required of a *supported* provider (§11.14).
 public interface IMonitoringStorage
 {
-    ValueTask<JobStatistics> GetStatisticsAsync(string? tenantId, CancellationToken ct);
+    ValueTask<JobStatistics> GetStatisticsAsync(TenantFilter tenant, CancellationToken ct);
     ValueTask<Page<JobSummary>> QueryJobsAsync(JobQuery query, CancellationToken ct);
     ValueTask<Page<WorkflowInstanceSummary>> QueryInstancesAsync(InstanceQuery query, CancellationToken ct);
-    ValueTask<JobDetails?> GetJobAsync(JobId id, CancellationToken ct);
+    ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct);   // not GetJobAsync — see below
 }
 
 // Query and paging DTOs — frozen in 0.2 with the API contract (§11.12).
 public sealed record JobQuery
 {
-    public IReadOnlyList<JobState>? States { get; init; }   // null = any
+    public IReadOnlyList<JobState>? States { get; init; }    // null or empty = any
     public string? Queue { get; init; }
-    public string? TenantId { get; init; }
+    public TenantFilter Tenant { get; init; }                // Any | Untenanted | For(id)
     public DateTimeOffset? CreatedAfter { get; init; }
     public DateTimeOffset? CreatedBefore { get; init; }
-    public string? Cursor { get; init; }                    // opaque; null = first page
-    public int Limit { get; init; } = 50;                   // provider clamps to <= 200
+    public string? Cursor { get; init; }                     // opaque; null = first page
+    public int Limit { get; init; } = 50;                    // clamped to <= 200, never rejected
 }
 
 /// Keyset page. No total count by design (§11.12) — aggregates come from GetStatisticsAsync.
@@ -382,3 +382,9 @@ Dashboard contract questions settled 2026-07-25, before any dashboard code was w
     - **Why not optional** (the `IStorageNotifier` model): "dashboard-included" is a headline claim. A provider that passes conformance yet leaves the dashboard blank turns that claim into a per-provider lottery, discovered by the end user.
     - **Why not folded into `IJobStorage`**: §4.1 separates the read model precisely so the hot path stays lean, and merging them forces every provider author to build query, filter and pagination before anything runs at all.
     - **Resolution:** separate interface, resolved independently; the conformance kit gains a monitoring suite; passing it is part of the bar for calling a provider supported. `MapMillraceDashboard` fails at startup, naming the provider, if the configured provider does not implement it — so the failure lands on the operator who can fix it, not the end user staring at an empty page. Implemented in InMemory and PostgreSQL in 0.2; the existing schema already supports it.
+15. **Read-model refinements found while writing the contract (2026-07-25).** Three adjustments to the §11.12 sketch, each forced by something the sketch had not confronted:
+    - **`GetJobDetailsAsync`, not `GetJobAsync`.** The bundled providers implement `IJobStorage` and `IMonitoringStorage` on one class, and C# cannot overload on return type — the sketch's name would have compelled explicit interface implementation in every such provider.
+    - **`TenantFilter` replaces `string? tenantId`.** A nullable string has to mean both "every tenant" and "the untenanted scope", which are different result sets wherever both exist; §11.8 already treats the null tenant as a scope of its own. Leaving it to provider interpretation would have guaranteed divergence. `TenantFilter` is `Any | Untenanted | For(id)`.
+    - **Summaries deliberately omit payloads.** `JobSummary` carries no serialized arguments and `WorkflowInstanceSummary` no data document. Both routinely hold personal data, and a list view would ship them for every row on every page to render columns that never display them. They appear only in the per-job detail read, which an operator requests explicitly.
+
+    Also recorded: **`JobDetails` exposes interruption and failure *counts*, not a per-attempt timeline.** The 0.1 schema stores `Attempt`, `Failures` and `LastError` only, so "attempt history" in §7 means the counters plus the last exception. `Interruptions` is derived as `Attempt − Failures` — free, thanks to §11.8's split, and enough to tell infrastructure churn apart from failing code. A real timeline needs a new per-attempt table in every provider and is deliberately not in 0.2.
