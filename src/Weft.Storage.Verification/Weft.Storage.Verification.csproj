@@ -6,7 +6,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Weft\Weft.csproj" />
+    <PackageReference Include="xunit.v3.assert" />
     <PackageReference Include="xunit.v3.extensibility.core" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
 
 </Project>
