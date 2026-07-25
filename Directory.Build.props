@@ -19,6 +19,33 @@
     <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)/README.md')">README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
     <PackageTags>jobs;background-jobs;workflow;orchestration;saga;scheduling;cron;durable</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!--
+    Reproducibility and debuggability (§11.31). Source Link ships in the SDK, so this needs no
+    package reference — only the two properties that turn it on.
+  -->
+  <PropertyGroup Label="Reproducibility">
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!--
+      Ships the XML docs that exist, which is most of the interesting API and the part carrying the
+      reasoning. CS1591 (missing comment on a public member) is suppressed rather than fixed: there
+      are 164 of them, and writing 164 comments in one pass produces 164 restatements of the method
+      name, which is worse than an honest gap. Tracked separately; the suppression is the thing to
+      delete when it closes.
+
+      CS1574 — an unresolvable cref — is deliberately NOT suppressed. That is a broken link in
+      shipped documentation, not a missing one.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1573 is the same category as CS1591: a member documented in prose but not per-parameter. -->
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
 
 </Project>

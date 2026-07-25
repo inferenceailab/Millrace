@@ -1,0 +1,28 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!--
+      Nothing under test/ ships. Stated here rather than per project so a new test project is
+      un-packable by existing, which is the safe direction: an accidental package is public forever.
+    -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!--
+      Deterministic source paths exist so a *shipped* package can be rebuilt byte-for-byte and
+      debugged through Source Link. Test assemblies ship nothing, and the remapping actively breaks
+      them: several tests read the repository's own source — the §11.22 parity check reads both UI
+      bundles' sources, the §11.24 wire-format check reads contract.ts — and they locate it with
+      [CallerFilePath], which records the compile-time path. Under ContinuousIntegrationBuild that
+      path becomes /_/… and no longer exists on disk.
+
+      Turning it off here rather than rewriting the tests: the tests are asking a reasonable
+      question, and a build setting whose purpose is reproducible *packages* has no business
+      changing what they can see.
+    -->
+    <ContinuousIntegrationBuild>false</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>

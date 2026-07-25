@@ -6,7 +6,7 @@ namespace Millrace.Dashboard.Endpoints;
 /// Turns a rejected paging cursor into <c>400 Bad Request</c>.
 /// </summary>
 /// <remarks>
-/// <see cref="MillraceStorageException"/> from a query means the caller supplied a cursor the
+/// <see cref="Millrace.Storage.MillraceStorageException"/> from a query means the caller supplied a cursor the
 /// provider did not issue — cursors arrive straight from a query string, so that is a client error,
 /// not a server fault. Without this it would surface as an unhandled exception and a 500, which
 /// tells the caller nothing and looks like an outage in monitoring.

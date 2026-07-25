@@ -75,7 +75,7 @@ public interface IJobClient
     /// <b>A new job, not a revived one</b> (§11.19). Every other part of the contract treats a
     /// terminal record as immutable, and rewriting one to make it runnable again would break that
     /// for the sake of a single operator action. The new job records
-    /// <see cref="JobRecord.RequeuedFrom"/> so the two ends stay visible to each other.
+    /// <see cref="Storage.JobRecord.RequeuedFrom"/> so the two ends stay visible to each other.
     /// </para>
     /// <para>
     /// Three consequences fall out rather than being chosen: the retry budget starts fresh because
