@@ -160,6 +160,21 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
             IF COL_LENGTH('{_schema}.jobs', 'recurring_id') IS NULL
                 ALTER TABLE {_schema}.jobs ADD recurring_id nvarchar(400) NULL;
+
+            -- Attempt history (§11.27). Only failed and interrupted executions land here, so a
+            -- healthy queue never writes to this table at all. The cascade is defensive: the
+            -- contract has no job-delete path today, and if one arrives the history must not
+            -- outlive its job.
+            IF OBJECT_ID('{_schema}.job_attempts') IS NULL
+            CREATE TABLE {_schema}.job_attempts (
+                job_id uniqueidentifier NOT NULL
+                    REFERENCES {_schema}.jobs (id) ON DELETE CASCADE,
+                attempt int NOT NULL,
+                outcome int NOT NULL,
+                recorded_at datetimeoffset NOT NULL,
+                worker_id nvarchar(200) NULL,
+                error nvarchar(max) NULL,
+                CONSTRAINT pk_job_attempts PRIMARY KEY (job_id, attempt));
             """;
 
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -360,6 +375,8 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         // on its own gives no ordering guarantee.
         await using var cmd = Command(conn, transaction: null,
             $"""
+             DECLARE @prior TABLE (id uniqueidentifier, state int, attempt int, worker_id nvarchar(200));
+
              WITH claimable AS (
                  SELECT TOP (@max) *
                  FROM {_schema}.jobs WITH (UPDLOCK, READPAST, ROWLOCK)
@@ -369,7 +386,28 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
              )
              UPDATE claimable
              SET state = 2, worker_id = @worker, lease_until = @lease, attempt = attempt + 1
-             OUTPUT {InsertedColumns()}
+             -- Two OUTPUT clauses: one captures the pre-update row, the other returns the claim to
+             -- the caller. Only the rows actually claimed reach @prior, which is why the
+             -- interruptions below cannot be recorded by a separate pass — another worker may take
+             -- a row this one was eligible for.
+             OUTPUT deleted.id, deleted.state, deleted.attempt, deleted.worker_id INTO @prior
+             OUTPUT {InsertedColumns()};
+
+             -- A row still Processing when it is claimed again ended without ever reporting a
+             -- verdict: the lease simply expired. That is the only moment an interruption becomes
+             -- observable, because nothing arrives to record it (§11.27).
+             INSERT INTO {_schema}.job_attempts (job_id, attempt, outcome, recorded_at, worker_id, error)
+             SELECT p.id, p.attempt, 1, @now, p.worker_id, NULL
+             FROM @prior p
+             WHERE p.state = 2
+               AND NOT EXISTS (SELECT 1 FROM {_schema}.job_attempts a
+                               WHERE a.job_id = p.id AND a.attempt = p.attempt);
+
+             -- Attempt numbers only ever increase, so "keep the most recent" is a comparison rather
+             -- than an ORDER BY / LIMIT per job.
+             DELETE a FROM {_schema}.job_attempts a
+             INNER JOIN @prior p ON a.job_id = p.id
+             WHERE a.attempt <= p.attempt - {JobAttemptRules.HistoryLimit};
              """,
             ("@max", request.MaxCount),
             ("@now", now),
@@ -458,11 +496,48 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
                 $"Invalid transition target state {transition.TargetState}.", nameof(transition)),
         };
 
+        // The attempt row is written by the same statement as the fenced UPDATE, inside the same
+        // transaction, so the timeline can never disagree with the counters it explains. The prior
+        // failure count comes from `deleted`, which is what separates a job that just failed from
+        // one dead-lettered without executing — a poison pill leaves the count untouched and has no
+        // attempt to describe (§11.27).
+        var history = $"""
+
+             INSERT INTO {_schema}.job_attempts (job_id, attempt, outcome, recorded_at, worker_id, error)
+             SELECT p.id, p.attempt, p.outcome, @now, p.worker_id, p.error
+             FROM @outcome p
+             WHERE p.outcome IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM {_schema}.job_attempts a
+                               WHERE a.job_id = p.id AND a.attempt = p.attempt);
+
+             DELETE a FROM {_schema}.job_attempts a
+             INNER JOIN @outcome p ON a.job_id = p.id
+             WHERE p.outcome IS NOT NULL AND a.attempt <= p.attempt - {JobAttemptRules.HistoryLimit};
+             """;
+
         await using (var cmd = Command(conn, tx,
             $"""
+             DECLARE @outcome TABLE (
+                 id uniqueidentifier, attempt int, worker_id nvarchar(200),
+                 outcome int NULL, error nvarchar(max) NULL);
+
              UPDATE {_schema}.jobs SET {set}
-             WHERE id = @id AND state = 2 AND worker_id = @worker AND attempt = @attempt
+             OUTPUT deleted.id, deleted.attempt, deleted.worker_id,
+                    CASE
+                        WHEN @target = 4 THEN 0
+                        WHEN @target = 5 AND @failures > deleted.failures THEN 0
+                        WHEN @target = 1 THEN 1
+                        ELSE NULL
+                    END,
+                    CASE WHEN @target = 4 OR (@target = 5 AND @failures > deleted.failures)
+                         THEN @error ELSE NULL END
+                 INTO @outcome
+             WHERE id = @id AND state = 2 AND worker_id = @worker AND attempt = @attempt;
+
+             IF @@ROWCOUNT = 0 SELECT 0 ELSE SELECT 1;
+             {history}
              """,
+            ("@now", now),
             ("@target", (int)transition.TargetState),
             ("@failures", transition.Failures),
             ("@error", Db(transition.Error)),
@@ -472,7 +547,9 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
             ("@worker", transition.ExpectedWorkerId),
             ("@attempt", transition.ExpectedAttempt)))
         {
-            if (await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 0)
+            // ExecuteScalar rather than ExecuteNonQuery: the row count now covers several
+            // statements, so the fence result has to be reported explicitly.
+            if (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is not 1)
             {
                 return false; // fence rejected — nothing changed, transaction discarded
             }
@@ -1268,6 +1345,32 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
             return null;
         }
 
+        // A second read rather than a join: the timeline is bounded and only wanted on the detail
+        // view, so joining it in would multiply the job's columns by its attempts for every caller
+        // that does not want them.
+        var attempts = new List<JobAttempt>();
+        await using (var conn = await OpenAsync(ct).ConfigureAwait(false))
+        await using (var cmd = Command(conn, transaction: null,
+            $"""
+             SELECT attempt, outcome, recorded_at, worker_id, error
+             FROM {_schema}.job_attempts WHERE job_id = @id ORDER BY attempt DESC
+             """,
+            ("@id", id.Value)))
+        {
+            await using var rows = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await rows.ReadAsync(ct).ConfigureAwait(false))
+            {
+                attempts.Add(new JobAttempt
+                {
+                    Attempt = rows.GetInt32(0),
+                    Outcome = (JobAttemptOutcome)rows.GetInt32(1),
+                    RecordedAt = rows.GetFieldValue<DateTimeOffset>(2),
+                    WorkerId = rows.IsDBNull(3) ? null : rows.GetString(3),
+                    Error = rows.IsDBNull(4) ? null : rows.GetString(4),
+                });
+            }
+        }
+
         return new JobDetails
         {
             Summary = new JobSummary
@@ -1295,6 +1398,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
             CancelRequested = job.CancelRequested,
             WorkflowInstanceId = job.WorkflowInstanceId,
             ActivityNodeId = job.ActivityNodeId,
+            Attempts = attempts,
         };
     }
 

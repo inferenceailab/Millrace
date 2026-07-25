@@ -110,7 +110,16 @@ internal sealed class SqlServerHarness(SqlServerStorage storage, string connecti
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
+        // Foreign keys are dropped first, then tables. job_attempts references jobs (§11.27), and
+        // sys.tables comes back in no useful order, so dropping tables blind fails on whichever
+        // side of the reference it reaches first.
         cmd.CommandText = $"""
+            DECLARE @drop nvarchar(max) = N'';
+            SELECT @drop = @drop + 'ALTER TABLE [{schema}].[' + OBJECT_NAME(parent_object_id)
+                                 + '] DROP CONSTRAINT [' + name + '];'
+                FROM sys.foreign_keys WHERE schema_id = SCHEMA_ID('{schema}');
+            IF @drop <> N'' EXEC sp_executesql @drop;
+
             DECLARE @sql nvarchar(max) = N'';
             SELECT @sql = @sql + 'DROP TABLE [{schema}].[' + name + '];'
                 FROM sys.tables WHERE schema_id = SCHEMA_ID('{schema}');

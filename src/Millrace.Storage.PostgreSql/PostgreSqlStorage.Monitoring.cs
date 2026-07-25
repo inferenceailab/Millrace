@@ -300,6 +300,36 @@ public sealed partial class PostgreSqlStorage
 
         // Reuses the full-record mapper so detail can never drift from what the engine sees.
         var r = ReadJob(reader);
+        await reader.CloseAsync().ConfigureAwait(false);
+
+        // A second read rather than a join: the timeline is bounded and only wanted on the detail
+        // view, so joining it into the row would multiply the job's columns by its attempts for
+        // every caller that does not want them.
+        var attempts = new List<JobAttempt>();
+        await using (var history = conn.CreateCommand())
+        {
+            history.CommandText = $"""
+                SELECT attempt, outcome, recorded_at, worker_id, error
+                FROM {_schema}.job_attempts
+                WHERE job_id = @id
+                ORDER BY attempt DESC
+                """;
+            history.Parameters.AddWithValue("id", id.Value);
+
+            await using var rows = await history.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await rows.ReadAsync(ct).ConfigureAwait(false))
+            {
+                attempts.Add(new JobAttempt
+                {
+                    Attempt = rows.GetInt32(0),
+                    Outcome = (JobAttemptOutcome)rows.GetInt32(1),
+                    RecordedAt = rows.GetFieldValue<DateTimeOffset>(2),
+                    WorkerId = rows.IsDBNull(3) ? null : rows.GetString(3),
+                    Error = rows.IsDBNull(4) ? null : rows.GetString(4),
+                });
+            }
+        }
+
         return new JobDetails
         {
             Summary = new JobSummary
@@ -327,6 +357,7 @@ public sealed partial class PostgreSqlStorage
             CancelRequested = r.CancelRequested,
             WorkflowInstanceId = r.WorkflowInstanceId,
             ActivityNodeId = r.ActivityNodeId,
+            Attempts = attempts,
         };
     }
 

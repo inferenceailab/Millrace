@@ -5,12 +5,10 @@ namespace Millrace.Storage.Monitoring;
 /// sensitive for a list view.
 /// </summary>
 /// <remarks>
-/// <b>No per-attempt timeline.</b> The 0.1 schema stores counters and the most recent error
-/// (<see cref="JobRecord.Attempt"/>, <see cref="JobRecord.Failures"/>,
-/// <see cref="JobRecord.LastError"/>), not one row per attempt. So this type can say *how many*
-/// times a job failed and *how many* times it was interrupted, and show the last exception — but
-/// not when each earlier attempt ran, on which worker, or with which error. A timeline needs a
-/// schema addition in every provider and is tracked separately.
+/// Carries both the counters (<see cref="JobRecord.Attempt"/>, <see cref="JobRecord.Failures"/>,
+/// and interruptions derived as their difference) and the per-attempt timeline in
+/// <see cref="Attempts"/>. The counters remain the summary answer to "is this job failing or is
+/// infrastructure killing it"; the timeline answers "and what happened each time".
 /// </remarks>
 public sealed record JobDetails
 {
@@ -36,6 +34,24 @@ public sealed record JobDetails
 
     /// <summary>The most recent recorded error; null if the job has never failed.</summary>
     public string? LastError { get; init; }
+
+    /// <summary>
+    /// Executions that failed or were interrupted, newest first (§11.27).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Successful attempts are not here</b>, by design: a job that succeeds first time records
+    /// nothing, so a healthy queue pays nothing for this. An empty list therefore means "nothing has
+    /// gone wrong", not "no history kept".
+    /// </para>
+    /// <para>
+    /// Bounded per job, so a job that fails thousands of times keeps only its most recent attempts.
+    /// <see cref="JobSummary.Attempt"/> and <see cref="JobSummary.Failures"/> stay exact regardless —
+    /// the counters are on the job row and are never pruned, so a truncated timeline can never
+    /// understate how often something failed.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<JobAttempt> Attempts { get; init; } = [];
 
     /// <summary>Lease expiry while <see cref="JobState.Processing"/>.</summary>
     public DateTimeOffset? LeaseUntil { get; init; }

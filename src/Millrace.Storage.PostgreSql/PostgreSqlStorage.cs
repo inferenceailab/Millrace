@@ -145,6 +145,19 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
             CREATE INDEX IF NOT EXISTS ix_jobs_recurring
                 ON {_schema}.jobs (recurring_id, created_at DESC, id DESC)
                 WHERE recurring_id IS NOT NULL;
+
+            -- Attempt history (§11.27). Only failed and interrupted executions land here, so a
+            -- healthy queue never writes to this table at all. ON DELETE CASCADE is defensive: the
+            -- contract has no job-delete path today, and if one ever arrives the history must not
+            -- outlive its job.
+            CREATE TABLE IF NOT EXISTS {_schema}.job_attempts (
+                job_id uuid NOT NULL REFERENCES {_schema}.jobs (id) ON DELETE CASCADE,
+                attempt integer NOT NULL,
+                outcome integer NOT NULL,
+                recorded_at timestamptz NOT NULL,
+                worker_id text,
+                error text,
+                PRIMARY KEY (job_id, attempt));
             """;
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         _initialized = true;
@@ -184,7 +197,27 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                   AND (state = 1 OR (state = 2 AND lease_until <= @now))
                 ORDER BY priority DESC, seq
                 LIMIT @max
-                FOR UPDATE SKIP LOCKED)
+                FOR UPDATE SKIP LOCKED),
+            -- Pre-update values. Every CTE in a statement sees the same snapshot, so this reads the
+            -- row as it was before the UPDATE below — which is the only way to know an attempt is
+            -- being reclaimed rather than started.
+            prior AS (
+                SELECT j.id, j.state, j.attempt, j.worker_id
+                FROM {_schema}.jobs j JOIN c ON j.id = c.id),
+            -- A row still Processing when it is claimed again ended without ever reporting a
+            -- verdict: the lease simply expired. That is the only moment an interruption becomes
+            -- observable, because nothing arrives to record it (§11.27).
+            interrupted AS (
+                INSERT INTO {_schema}.job_attempts (job_id, attempt, outcome, recorded_at, worker_id, error)
+                SELECT p.id, p.attempt, 1, @now, p.worker_id, NULL
+                FROM prior p WHERE p.state = 2
+                ON CONFLICT (job_id, attempt) DO NOTHING),
+            -- Attempt numbers only ever increase, so "keep the most recent" is a comparison rather
+            -- than an ORDER BY / LIMIT per job.
+            pruned AS (
+                DELETE FROM {_schema}.job_attempts a
+                USING prior p
+                WHERE a.job_id = p.id AND a.attempt <= p.attempt - {JobAttemptRules.HistoryLimit})
             UPDATE {_schema}.jobs j
             SET state = 2, worker_id = @worker, lease_until = @until, attempt = j.attempt + 1
             FROM c WHERE j.id = c.id
@@ -252,6 +285,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
         var now = _time.GetUtcNow().ToUniversalTime();
         var wakeups = new HashSet<string>(StringComparer.Ordinal);
+        var priorFailures = 0;
 
         await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
         await using var tx = await conn.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -277,10 +311,15 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
 
         await using (var cmd = conn.CreateCommand())
         {
+            // The prior failure count comes back alongside the queue: it is what separates a job
+            // that just failed from one dead-lettered without executing (a poison pill leaves the
+            // count untouched), and there is no attempt to record for the latter. The CTE sees the
+            // pre-update snapshot, so this costs no extra round trip (§11.27).
             cmd.CommandText = $"""
+                WITH prior AS (SELECT failures FROM {_schema}.jobs WHERE id = @id)
                 UPDATE {_schema}.jobs SET {set}
                 WHERE id = @id AND state = 2 AND worker_id = @worker AND attempt = @attempt
-                RETURNING queue
+                RETURNING queue, (SELECT failures FROM prior) AS prior_failures
                 """;
             cmd.Parameters.AddWithValue("target", (int)transition.TargetState);
             cmd.Parameters.AddWithValue("failures", transition.Failures);
@@ -298,16 +337,44 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
             cmd.Parameters.AddWithValue("worker", transition.ExpectedWorkerId);
             cmd.Parameters.AddWithValue("attempt", transition.ExpectedAttempt);
 
-            var queue = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-            if (queue is null)
+            string queue;
+            await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
             {
-                return false; // fence rejected — nothing changed, transaction discarded
+                if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    return false; // fence rejected — nothing changed, transaction discarded
+                }
+
+                queue = reader.GetString(0);
+                priorFailures = reader.GetInt32(1);
             }
 
             if (transition.TargetState == JobState.Enqueued)
             {
-                wakeups.Add((string)queue);
+                wakeups.Add(queue);
             }
+        }
+
+        // Inside the same transaction as the fenced UPDATE, so the timeline can never disagree with
+        // the counters it explains: either both land or neither does.
+        if (JobAttemptRules.OutcomeFor(transition, priorFailures) is { } outcome)
+        {
+            await using var history = conn.CreateCommand();
+            history.CommandText = $"""
+                INSERT INTO {_schema}.job_attempts (job_id, attempt, outcome, recorded_at, worker_id, error)
+                VALUES (@id, @attempt, @outcome, @now, @worker, @error)
+                ON CONFLICT (job_id, attempt) DO NOTHING;
+                DELETE FROM {_schema}.job_attempts
+                WHERE job_id = @id AND attempt <= @attempt - {JobAttemptRules.HistoryLimit};
+                """;
+            history.Parameters.AddWithValue("id", transition.JobId.Value);
+            history.Parameters.AddWithValue("attempt", transition.ExpectedAttempt);
+            history.Parameters.AddWithValue("outcome", (int)outcome);
+            history.Parameters.AddWithValue("now", now);
+            history.Parameters.AddWithValue("worker", transition.ExpectedWorkerId);
+            history.Parameters.AddWithValue(
+                "error", outcome == JobAttemptOutcome.Failed ? Db(transition.Error) : DBNull.Value);
+            await history.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
 
         // The fence has held, so this worker still owns the job and may advance the instance. A

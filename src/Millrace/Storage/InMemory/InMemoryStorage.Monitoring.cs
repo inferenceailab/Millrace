@@ -151,6 +151,8 @@ public sealed partial class InMemoryStorage
                 CancelRequested = r.CancelRequested,
                 WorkflowInstanceId = r.WorkflowInstanceId,
                 ActivityNodeId = r.ActivityNodeId,
+                // Newest first: a timeline is read from what just happened backwards.
+                Attempts = [.. entry.Attempts.AsEnumerable().Reverse()],
             });
         }
     }
