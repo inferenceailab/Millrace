@@ -112,4 +112,15 @@ public interface ISagaBuilder<TData>
     /// </summary>
     /// <exception cref="InvalidOperationException">No step has been appended yet.</exception>
     ISagaBuilder<TData> CompensateWith<TActivity>() where TActivity : IActivity<TData>;
+
+    /// <summary>
+    /// Declares what the step just appended does when its retries are exhausted (§6.4).
+    /// </summary>
+    /// <remarks>
+    /// Annotates the preceding step, exactly like <see cref="CompensateWith{TActivity}"/>. Without
+    /// it a step unwinds the saga, which is the right default and the wrong one for a step whose
+    /// earlier work should stand or whose failure needs a human first.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">No step has been appended yet.</exception>
+    ISagaBuilder<TData> OnFailure(StepFailurePolicy policy);
 }

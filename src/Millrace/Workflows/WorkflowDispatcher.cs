@@ -185,6 +185,32 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             var node = Node(nodeId);
             var sagas = new Dictionary<string, SagaState>(_cursor.Sagas, StringComparer.Ordinal);
 
+            // The step's own policy is consulted before the saga's default, and only when the saga
+            // is not already unwinding — once compensation has started, a failure is a *failed
+            // compensation*, and the policy on the step that originally failed has nothing to say
+            // about it (§11.28).
+            var unwinding = node.SagaId is { } current
+                && sagas.TryGetValue(current, out var running)
+                && running.Compensating;
+
+            if (!unwinding && node.OnFailure is StepFailurePolicy.Suspend or StepFailurePolicy.Terminate)
+            {
+                // Suspend leaves the completed steps completed, so an operator can still start the
+                // unwind. Terminate says the earlier work should stand — undoing it would be worse
+                // than leaving it — so nothing is scheduled either way.
+                Checkpoint(
+                    node.OnFailure == StepFailurePolicy.Suspend
+                        ? WorkflowInstanceState.Suspended
+                        : WorkflowInstanceState.Failed,
+                    joins: new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal),
+                    waits: new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal),
+                    sagas: sagas,
+                    scheduled: [],
+                    bookmarks: []);
+
+                return Task.CompletedTask;
+            }
+
             if (node.SagaId is { } sagaId
                 && sagas.TryGetValue(sagaId, out var saga)
                 && !saga.Compensating
