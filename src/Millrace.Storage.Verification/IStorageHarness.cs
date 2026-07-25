@@ -13,4 +13,11 @@ public interface IStorageHarness : IAsyncDisposable
     IJobStorage Jobs { get; }
 
     IWorkflowStorage Workflows { get; }
+
+    /// <summary>
+    /// The dashboard read model. Required, not optional: §11.14 makes implementing
+    /// <see cref="Monitoring.IMonitoringStorage"/> part of the bar for a supported provider, so a
+    /// harness cannot opt out of the monitoring facts.
+    /// </summary>
+    Monitoring.IMonitoringStorage Monitoring { get; }
 }

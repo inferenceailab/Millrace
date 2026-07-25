@@ -12,6 +12,8 @@ internal sealed class InMemoryHarness(TimeProvider time) : IStorageHarness
 
     public IWorkflowStorage Workflows => _storage;
 
+    public Millrace.Storage.Monitoring.IMonitoringStorage Monitoring => _storage;
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -23,6 +25,12 @@ public sealed class InMemoryJobStorageConformanceTests : JobStorageConformanceSu
 }
 
 public sealed class InMemoryWorkflowStorageConformanceTests : WorkflowStorageConformanceSuite
+{
+    protected override ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time)
+        => ValueTask.FromResult<IStorageHarness>(new InMemoryHarness(time));
+}
+
+public sealed class InMemoryMonitoringConformanceTests : MonitoringConformanceSuite
 {
     protected override ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time)
         => ValueTask.FromResult<IStorageHarness>(new InMemoryHarness(time));

@@ -128,6 +128,8 @@ internal sealed class PostgreSqlHarness : IStorageHarness
 
     public IWorkflowStorage Workflows => _storage;
 
+    public Millrace.Storage.Monitoring.IMonitoringStorage Monitoring => _storage;
+
     public async ValueTask DisposeAsync()
     {
         await using (var conn = await _dataSource.OpenConnectionAsync())
@@ -179,6 +181,12 @@ public sealed class PostgreSqlJobStorageConformanceTests : JobStorageConformance
 }
 
 public sealed class PostgreSqlWorkflowStorageConformanceTests : WorkflowStorageConformanceSuite
+{
+    protected override ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time)
+        => PostgreSqlHarness.CreateAsync(time);
+}
+
+public sealed class PostgreSqlMonitoringConformanceTests : MonitoringConformanceSuite
 {
     protected override ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time)
         => PostgreSqlHarness.CreateAsync(time);

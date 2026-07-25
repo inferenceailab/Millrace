@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
+using Millrace.Storage.Monitoring;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -14,7 +15,7 @@ namespace Millrace.Storage.PostgreSql;
 /// <see cref="TimeProvider"/>, never database time, so the conformance kit drives this
 /// provider with a fake clock exactly like InMemory.
 /// </summary>
-public sealed class PostgreSqlStorage : IJobStorage, IWorkflowStorage, IStorageNotifier
+public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, IStorageNotifier, IMonitoringStorage
 {
     private const string ActiveStates = "0, 1, 2, 4, 7"; // Scheduled, Enqueued, Processing, Failed, Awaiting
 
@@ -116,6 +117,18 @@ public sealed class PostgreSqlStorage : IJobStorage, IWorkflowStorage, IStorageN
                 created_at timestamptz NOT NULL);
             CREATE INDEX IF NOT EXISTS ix_bookmarks_lookup
                 ON {_schema}.bookmarks (signal_name, correlation_id, created_at, id);
+            -- Monitoring read model (§11.12): keyset order is (created_at DESC, id DESC). The
+            -- state-leading index serves the common dashboard view, a list filtered to one state;
+            -- the bare one serves an unfiltered list. There is no count index because §11.12
+            -- removed totals from list responses.
+            CREATE INDEX IF NOT EXISTS ix_jobs_monitor
+                ON {_schema}.jobs (created_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS ix_jobs_monitor_state
+                ON {_schema}.jobs (state, created_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS ix_instances_monitor
+                ON {_schema}.workflow_instances (created_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS ix_instances_monitor_state
+                ON {_schema}.workflow_instances (state, created_at DESC, id DESC);
             """;
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         _initialized = true;
