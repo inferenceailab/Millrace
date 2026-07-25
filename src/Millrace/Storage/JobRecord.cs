@@ -86,6 +86,24 @@ public sealed record JobRecord
     /// </remarks>
     public string? TraceParent { get; init; }
 
+    /// <summary>
+    /// The recurring definition that produced this job, if any (§11.26).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing linked a fired job back to its definition, so "did last night's run succeed" had no
+    /// join to walk in either direction — §7 promised a last outcome the schema could not source.
+    /// This is that link, and it makes the whole fired-job history queryable rather than only the
+    /// most recent one.
+    /// </para>
+    /// <para>
+    /// A <em>provenance</em> field, not a live reference: it records which definition produced the
+    /// job, and survives the definition being edited or removed. The definition's own identity stays
+    /// its id, so a job outlives its origin without dangling.
+    /// </para>
+    /// </remarks>
+    public string? RecurringId { get; init; }
+
     public string? LastError { get; init; }
 
     public DateTimeOffset? FinishedAt { get; init; }

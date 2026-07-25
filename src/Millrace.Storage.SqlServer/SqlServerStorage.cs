@@ -32,7 +32,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         "id, queue, state, priority, invocation, retry, created_at, due_at, worker_id, " +
         "lease_until, attempt, failures, cancel_requested, idempotency_key, tenant_id, " +
         "parent_id, last_error, finished_at, workflow_instance_id, activity_node_id, requeued_from, " +
-        "trace_parent";
+        "trace_parent, recurring_id";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.General);
 
@@ -90,9 +90,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
                 last_error nvarchar(max) NULL,
                 finished_at datetimeoffset NULL,
                 workflow_instance_id uniqueidentifier NULL,
-                activity_node_id nvarchar(200) NULL,
-                requeued_from uniqueidentifier NULL,
-                trace_parent nvarchar(200) NULL);
+                activity_node_id nvarchar(200) NULL);
 
             IF IndexProperty(OBJECT_ID('{_schema}.jobs'), 'ux_jobs_active_key', 'IndexID') IS NULL
             EXEC('CREATE UNIQUE INDEX ux_jobs_active_key ON {_schema}.jobs (tenant_id, idempotency_key)
@@ -148,9 +146,34 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
             IF IndexProperty(OBJECT_ID('{_schema}.bookmarks'), 'ix_bookmarks_lookup', 'IndexID') IS NULL
             EXEC('CREATE INDEX ix_bookmarks_lookup ON {_schema}.bookmarks (signal_name, correlation_id, created_at, id)');
+
+            -- Columns added after 0.1 (§11.25). They live here rather than in the CREATE TABLE
+            -- above because that statement is skipped entirely once the table exists: a column
+            -- added there reaches new databases and silently never reaches upgraded ones, which is
+            -- how requeued_from and trace_parent shipped in 0.4 unable to load on any 0.3 database.
+            -- One place per column, and it is this one.
+            IF COL_LENGTH('{_schema}.jobs', 'requeued_from') IS NULL
+                ALTER TABLE {_schema}.jobs ADD requeued_from uniqueidentifier NULL;
+
+            IF COL_LENGTH('{_schema}.jobs', 'trace_parent') IS NULL
+                ALTER TABLE {_schema}.jobs ADD trace_parent nvarchar(200) NULL;
+
+            IF COL_LENGTH('{_schema}.jobs', 'recurring_id') IS NULL
+                ALTER TABLE {_schema}.jobs ADD recurring_id nvarchar(400) NULL;
             """;
 
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
+        // A separate batch: the filtered index cannot be created in the same batch that adds the
+        // column it indexes, because the whole batch is parsed before any of it runs.
+        await using var indexes = conn.CreateCommand();
+        indexes.CommandText = $"""
+            IF IndexProperty(OBJECT_ID('{_schema}.jobs'), 'ix_jobs_recurring', 'IndexID') IS NULL
+            EXEC('CREATE INDEX ix_jobs_recurring ON {_schema}.jobs (recurring_id, created_at DESC, id DESC)
+                  WHERE recurring_id IS NOT NULL');
+            """;
+
+        await indexes.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         _initialized = true;
     }
 
@@ -261,7 +284,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
                  INSERT INTO {_schema}.jobs ({JobColumns})
                  VALUES (@id, @queue, @state, @priority, @invocation, @retry, @created, @due, @worker,
                          @lease, @attempt, @failures, @cancel, @key, @tenant, @parent, @error,
-                         @finished, @wf, @activity, @requeued, @trace)
+                         @finished, @wf, @activity, @requeued, @trace, @recurring)
                  """,
                 ("@id", effective.Id.Value),
                 ("@queue", effective.Queue),
@@ -284,7 +307,8 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
                 ("@wf", Db(effective.WorkflowInstanceId?.Value)),
                 ("@activity", Db(effective.ActivityNodeId)),
                 ("@requeued", Db(effective.RequeuedFrom?.Value)),
-                ("@trace", Db(effective.TraceParent)));
+                ("@trace", Db(effective.TraceParent)),
+                ("@recurring", Db(effective.RecurringId)));
 
             await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             return effective.Id;
@@ -915,6 +939,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         ActivityNodeId = reader.IsDBNull(19) ? null : reader.GetString(19),
         RequeuedFrom = reader.IsDBNull(20) ? null : new JobId(reader.GetGuid(20)),
         TraceParent = reader.IsDBNull(21) ? null : reader.GetString(21),
+        RecurringId = reader.IsDBNull(22) ? null : reader.GetString(22),
     };
 
     private static RecurringJobRecord ReadRecurring(SqlDataReader reader) => new()
@@ -1178,11 +1203,26 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         }
 
         cmd.CommandText = $"""
-            SELECT TOP (@limit) id, cron, queue, invocation, priority, tenant_id,
-                   next_fire_time, last_fire_time, created_at, updated_at
-            FROM {_schema}.recurring
+            SELECT TOP (@limit) r.id, r.cron, r.queue, r.invocation, r.priority, r.tenant_id,
+                   r.next_fire_time, r.last_fire_time, r.created_at, r.updated_at,
+                   last_job.last_state, last_job.last_id
+            FROM {_schema}.recurring r
+            OUTER APPLY (
+                -- SQL Server's LATERAL. One row per definition through ix_jobs_recurring, and
+                -- definitions are few, so the schedule view stays a single round trip. Ordered by
+                -- creation, not completion: an occurrence still running must read Processing rather
+                -- than showing last night's success (§11.26).
+                --
+                -- Aliased rather than bare, because the filter and cursor predicates come from
+                -- helpers shared with the other list queries and use unqualified column names — a
+                -- second `id` in scope would make those silently ambiguous.
+                SELECT TOP (1) j.id AS last_id, j.state AS last_state
+                FROM {_schema}.jobs j
+                WHERE j.recurring_id = r.id
+                ORDER BY j.created_at DESC, j.id DESC
+            ) AS last_job
             WHERE {Where(filters)}
-            ORDER BY next_fire_time ASC, id ASC
+            ORDER BY r.next_fire_time ASC, r.id ASC
             """;
         cmd.Parameters.AddWithValue("@limit", limit + 1);
 
@@ -1205,6 +1245,8 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
                     LastFireTime = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7),
                     CreatedAt = reader.GetFieldValue<DateTimeOffset>(8),
                     UpdatedAt = reader.GetFieldValue<DateTimeOffset>(9),
+                    LastOutcome = reader.IsDBNull(10) ? null : (JobState)reader.GetInt32(10),
+                    LastJobId = reader.IsDBNull(11) ? null : new JobId(reader.GetGuid(11)),
                 });
             }
         }
