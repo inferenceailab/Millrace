@@ -65,4 +65,29 @@ public interface IJobClient
     /// normal cadence continues. Returns false if no such definition is registered.
     /// </remarks>
     ValueTask<bool> TriggerRecurringAsync(string recurringId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Runs a finished job again, as a new job carrying a link back to it. Returns the new id, or
+    /// null if <paramref name="id"/> does not exist.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A new job, not a revived one</b> (§11.19). Every other part of the contract treats a
+    /// terminal record as immutable, and rewriting one to make it runnable again would break that
+    /// for the sake of a single operator action. The new job records
+    /// <see cref="JobRecord.RequeuedFrom"/> so the two ends stay visible to each other.
+    /// </para>
+    /// <para>
+    /// Three consequences fall out rather than being chosen: the retry budget starts fresh because
+    /// the job is new; the idempotency key is carried, so if another active job already holds it the
+    /// existing enqueue semantics make this a no-op returning that job's id; and the original's
+    /// continuations are <em>not</em> revived, because they were cancelled when it died and nothing
+    /// about a new job resurrects them.
+    /// </para>
+    /// <para>
+    /// Requeueing a job that is still running is refused — that is what
+    /// <see cref="CancelAsync"/> is for.
+    /// </para>
+    /// </remarks>
+    ValueTask<JobId?> RequeueAsync(JobId id, CancellationToken ct = default);
 }

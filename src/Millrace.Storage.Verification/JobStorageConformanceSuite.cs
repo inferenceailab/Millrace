@@ -325,6 +325,7 @@ public abstract partial class JobStorageConformanceSuite
         record = record with
         {
             ParentId = parent.Id,
+            RequeuedFrom = parent.Id,
             Invocation = new JobInvocation
             {
                 TypeName = "My.Jobs.IMailer, My.Jobs",
@@ -347,6 +348,7 @@ public abstract partial class JobStorageConformanceSuite
         Assert.Equal("rk", stored.IdempotencyKey);
         Assert.Equal("tenant-r", stored.TenantId);
         Assert.Equal(parent.Id, stored.ParentId);
+        Assert.Equal(parent.Id, stored.RequeuedFrom);
         Assert.Equal(record.Retry, stored.Retry);
         Assert.Equal(0, stored.Attempt);
         Assert.Equal(0, stored.Failures);

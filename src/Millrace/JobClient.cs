@@ -94,6 +94,46 @@ public sealed class JobClient(
     public ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default)
         => storage.TryCancelAsync(id, ct);
 
+    public async ValueTask<JobId?> RequeueAsync(JobId id, CancellationToken ct = default)
+    {
+        var original = await storage.GetJobAsync(id, ct).ConfigureAwait(false);
+        if (original is null)
+        {
+            return null;
+        }
+
+        if (!original.State.IsTerminal() && original.State != JobState.Failed)
+        {
+            throw new InvalidOperationException(
+                $"Job '{id}' is {original.State} and has not finished. Requeueing a job that is still "
+                + "scheduled, queued or running would duplicate work — cancel it first if that is the "
+                + "intent.");
+        }
+
+        var copy = new JobRecord
+        {
+            Id = JobId.New(time),
+            Queue = original.Queue,
+            State = JobState.Enqueued,
+            Priority = original.Priority,
+            Invocation = original.Invocation,
+            Retry = original.Retry,
+            // Carried deliberately: if another active job now holds the key, the existing enqueue
+            // semantics make this a no-op returning that job — which is the correct answer to
+            // "run this again" when an equivalent run is already in flight.
+            IdempotencyKey = original.IdempotencyKey,
+            TenantId = original.TenantId,
+            CreatedAt = time.GetUtcNow(),
+            RequeuedFrom = original.Id,
+            // Not copied: ParentId, WorkflowInstanceId and ActivityNodeId. A requeue is a fresh
+            // piece of work, not a continuation or a workflow step — reattaching it to either would
+            // make it advance state that has already moved on.
+        };
+
+        var ids = await storage.EnqueueAsync([copy], ct).ConfigureAwait(false);
+        return ids[0];
+    }
+
     public async ValueTask<bool> TriggerRecurringAsync(string recurringId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recurringId);
