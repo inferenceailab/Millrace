@@ -34,7 +34,7 @@ jobs:
       # of the published package never need Node — building this repository does.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 24.15.0
       - name: Restore
         run: dotnet restore
       - name: Build

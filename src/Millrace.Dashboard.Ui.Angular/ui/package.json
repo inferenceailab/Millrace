@@ -1,6 +1,7 @@
 {
   "name": "millrace-dashboard-ui-angular",
   "private": true,
+  "engines": { "node": "^22.22.3 || ^24.15.0 || >=26.0.0" },
   "version": "0.1.0",
   "scripts": {
     "build": "ng build",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@angular/build": "^22.0.0",
+    "@angular/cli": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
     "typescript": "~6.0.0"
   }
