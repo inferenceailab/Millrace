@@ -40,6 +40,23 @@ provider carries jobs, a workflow and the dashboard in one process. Add one conn
 run the same sample on PostgreSQL and watch jobs survive a restart. See
 [samples/README.md](samples/README.md).
 
+## Testing your jobs
+
+`Millrace.Testing` runs work deterministically, so a test never polls or sleeps:
+
+```csharp
+await using var millrace = MillraceTestHost.Create(
+    services => services.AddScoped<IEmailSender, EmailSender>());
+
+await millrace.Jobs.EnqueueAsync<IEmailSender>(s => s.SendAsync(orderId));
+await millrace.RunUntilIdleAsync();
+
+Assert.True(sent);
+```
+
+Delays, retry backoff and signal timeouts are reached with `AdvanceTime` rather than waiting — a
+seven-day timeout is one call.
+
 ## Repository layout
 
 ```
