@@ -139,10 +139,14 @@ export interface WorkflowInstanceSummary {
   revision: number
 }
 
+/**
+ * `GET /info`. The field is `apiVersion`, not `version` — this type was written from memory in #88
+ * and never checked against the wire, so the header rendered `undefined`. The raw-JSON tests added
+ * with §11.24 exist so the next mismatch fails a build instead of rendering blank.
+ */
 export interface DashboardInfo {
-  version: string
+  apiVersion: string
   storageProvider: string
-  supportsWorkflows: boolean
 }
 
 /** The new job's id, returned by requeue. */

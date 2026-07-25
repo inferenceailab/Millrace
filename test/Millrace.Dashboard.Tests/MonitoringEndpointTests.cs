@@ -24,7 +24,19 @@ namespace Millrace.Dashboard.Tests;
 /// </remarks>
 public sealed class MonitoringEndpointTests : IAsyncLifetime
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    /// <summary>
+    /// Reads the wire format the dashboard actually produces — enums as names (§11.24).
+    /// </summary>
+    /// <remarks>
+    /// These options previously omitted the converter and every test still passed, because the
+    /// dashboard was writing integers: the reader and the writer were wrong in the same direction.
+    /// A typed consumer needs this converter too, and gets both formats for free — it reads names
+    /// and numbers alike.
+    /// </remarks>
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
 
     private WebApplication _app = null!;
     private HttpClient _client = null!;

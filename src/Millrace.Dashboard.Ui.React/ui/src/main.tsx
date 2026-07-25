@@ -29,7 +29,7 @@ function App() {
         <span className="sub">Durable jobs and workflow orchestration</span>
         {info && (
           <span className="sub">
-            {info.version} · {info.storageProvider}
+            {info.apiVersion} · {info.storageProvider}
           </span>
         )}
       </header>
