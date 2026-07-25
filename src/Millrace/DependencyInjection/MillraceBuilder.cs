@@ -68,6 +68,9 @@ public sealed class MillraceBuilder(IServiceCollection services)
         // Scoped: the dispatcher writes into the per-execution JobSideEffects, so it must not
         // outlive one job.
         Services.TryAddScoped<IWorkflowDispatcher, WorkflowDispatcher>();
+        // Only registered when workflows are: an application using the job substrate alone never
+        // pays for it, and the worker stays unaware that workflows exist.
+        Services.TryAddEnumerable(ServiceDescriptor.Singleton<IJobFailureObserver, WorkflowFailureObserver>());
         return this;
     }
 

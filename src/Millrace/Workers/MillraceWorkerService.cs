@@ -18,6 +18,7 @@ internal sealed class MillraceWorkerService(
     JobExecutor executor,
     TimeProvider time,
     IOptions<MillraceOptions> options,
+    IEnumerable<Millrace.Workflows.IJobFailureObserver> failureObservers,
     ILogger<MillraceWorkerService> logger) : BackgroundService
 {
     private enum CancelReason { None, LeaseLost, Superseded, CancelRequested }
@@ -204,8 +205,10 @@ internal sealed class MillraceWorkerService(
                 }
                 else
                 {
+                    // A dead job is the last chance to tell a layer above that its work failed:
+                    // nothing of theirs is running, and after this transition the job is gone.
                     await ApplyTransitionAsync(Terminal(job, JobState.Dead, failures, error,
-                        cancelContinuations: true)).ConfigureAwait(false);
+                        cancelContinuations: true, effects: FailureEffects(job))).ConfigureAwait(false);
                 }
             }
         }
@@ -481,6 +484,41 @@ internal sealed class MillraceWorkerService(
         Bookmarks = effects is null ? [] : effects.Bookmarks,
         Checkpoint = effects?.Checkpoint,
     };
+
+    /// <summary>
+    /// Collects what the observers want committed with a dead-lettered job's transition.
+    /// </summary>
+    /// <remarks>
+    /// An observer that throws must not stop the job being dead-lettered: the transition is the
+    /// important part, and a lost notification is recoverable where a job stuck in Processing is not.
+    /// </remarks>
+    private JobSideEffects? FailureEffects(JobRecord job)
+    {
+        JobSideEffects? effects = null;
+
+        foreach (var observer in failureObservers)
+        {
+            try
+            {
+                var records = observer.OnDeadLettered(job);
+                if (records.Count == 0)
+                {
+                    continue;
+                }
+
+                effects ??= new JobSideEffects();
+                effects.Enqueue.AddRange(records);
+            }
+            catch (Exception e)
+            {
+                logger.LogError(
+                    e, "Failure observer {Observer} threw for job {JobId}; dead-lettering anyway.",
+                    observer.GetType().Name, job.Id);
+            }
+        }
+
+        return effects;
+    }
 
     private JobTransition Release(JobRecord job) => new()
     {

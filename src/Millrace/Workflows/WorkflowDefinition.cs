@@ -55,12 +55,12 @@ public abstract class WorkflowDefinition
         for (var i = nodes.Count - 1; i >= 0; i--)
         {
             var branchNode = byId[nodes[i].Id];
-            if (branchNode.Kind != WorkflowNodeKind.If)
+            if (branchNode.Kind is not (WorkflowNodeKind.If or WorkflowNodeKind.Saga))
             {
                 continue;
             }
 
-            foreach (var arm in new[] { branchNode.WhenTrue, branchNode.WhenFalse })
+            foreach (var arm in new[] { branchNode.WhenTrue, branchNode.WhenFalse, branchNode.Body })
             {
                 if (arm is null)
                 {
@@ -74,6 +74,40 @@ public abstract class WorkflowDefinition
                 }
 
                 byId[terminal] = byId[terminal] with { Next = branchNode.Next };
+            }
+        }
+
+        return nodes.Select(n => byId[n.Id]).ToList();
+    }
+
+    /// <summary>
+    /// Marks every node inside a saga's body with that saga's id.
+    /// </summary>
+    /// <remarks>
+    /// A dead-lettered job carries only its own node id, so the engine has to find the enclosing
+    /// saga from the graph. Computing it once here beats threading it through every job — and it
+    /// cannot drift, because it is derived from the same structure the walk uses.
+    /// </remarks>
+    private static List<WorkflowNode> AssignSagas(List<WorkflowNode> nodes)
+    {
+        var byId = nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
+
+        foreach (var saga in nodes.Where(n => n.Kind == WorkflowNodeKind.Saga))
+        {
+            // Follow the body's sequence only. A step's own Next leaves the saga once the body ends,
+            // so the walk stops where the saga does.
+            for (var id = saga.Body; id is not null; id = byId[id].Next)
+            {
+                if (byId[id].SagaId is not null)
+                {
+                    break; // already claimed by an inner saga
+                }
+
+                byId[id] = byId[id] with { SagaId = saga.Id };
+                if (byId[id].Next is null || byId[id].Next == saga.Next)
+                {
+                    break;
+                }
             }
         }
 
@@ -123,10 +157,11 @@ public abstract class WorkflowDefinition
             DefinitionId = workflow.Id,
             Version = workflow.Version,
             Start = builder.Entry,
-            Nodes = LinkBranchExits(state.Nodes),
+            Nodes = AssignSagas(LinkBranchExits(state.Nodes)),
         };
 
-        return new WorkflowDefinition<TData>(workflow.Id, workflow.Version, graph, state.Bindings);
+        return new WorkflowDefinition<TData>(
+            workflow.Id, workflow.Version, graph, state.Bindings, state.Compensations);
     }
 }
 
@@ -134,9 +169,17 @@ public abstract class WorkflowDefinition
 public sealed class WorkflowDefinition<TData> : WorkflowDefinition
 {
     internal WorkflowDefinition(
-        string id, int version, WorkflowGraph graph, IReadOnlyDictionary<string, NodeBinding<TData>> bindings)
+        string id, int version, WorkflowGraph graph,
+        IReadOnlyDictionary<string, NodeBinding<TData>> bindings,
+        IReadOnlyDictionary<string, Type> compensations)
         : base(id, version, typeof(TData), graph)
-        => Bindings = bindings;
+    {
+        Bindings = bindings;
+        Compensations = compensations;
+    }
+
+    /// <summary>Compensating activity type per saga step, by step node id.</summary>
+    internal IReadOnlyDictionary<string, Type> Compensations { get; }
 
     /// <summary>
     /// Executable bindings by node id. Internal: they are engine state, and exposing them would

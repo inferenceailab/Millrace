@@ -44,6 +44,24 @@ public interface IWorkflowBuilder<TData>
     /// </remarks>
     IWorkflowBuilder<TData> Parallel(params Action<IWorkflowBuilder<TData>>[] branches);
 
+    /// <summary>
+    /// A sequence whose completed steps are undone in reverse order if a later one fails past its
+    /// retry policy (§6.4).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Compensation is triggered by <em>exhausted retries</em>, not by the first exception: a step
+    /// that fails transiently and then succeeds has not failed, and unwinding it would be wrong.
+    /// </para>
+    /// <para>
+    /// Each compensation runs as its own durable job with its own retry policy. If a compensation
+    /// itself fails past its retries the instance is left <c>Suspended</c> rather than forced to a
+    /// terminal state — a half-undone saga is exactly the case where an operator should look before
+    /// anything else happens.
+    /// </para>
+    /// </remarks>
+    IWorkflowBuilder<TData> Saga(Action<ISagaBuilder<TData>> steps);
+
     /// <summary>Runs <paramref name="body"/> once per item of a collection selected from the document.</summary>
     IWorkflowBuilder<TData> ForEach<TItem>(
         Expression<Func<TData, IEnumerable<TItem>>> collection,
@@ -81,4 +99,17 @@ public interface IWorkflowBuilder<TData>
         Expression<Func<TData, string>> correlate,
         Action<TData, TPayload> bind,
         TimeSpan? timeout = null);
+}
+
+/// <summary>The steps of a <see cref="IWorkflowBuilder{TData}.Saga"/>, each optionally undoable.</summary>
+public interface ISagaBuilder<TData>
+{
+    /// <summary>Appends a step.</summary>
+    ISagaBuilder<TData> Then<TActivity>() where TActivity : IActivity<TData>;
+
+    /// <summary>
+    /// Declares the activity that undoes the step just appended.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No step has been appended yet.</exception>
+    ISagaBuilder<TData> CompensateWith<TActivity>() where TActivity : IActivity<TData>;
 }
