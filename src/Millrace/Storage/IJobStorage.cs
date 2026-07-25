@@ -93,8 +93,21 @@ public interface IJobStorage
     /// WorkerId/LeaseUntil cleared; Enqueued release ⇒ WorkerId/LeaseUntil cleared);
     /// <see cref="JobTransition.Enqueue"/> inserts (EnqueueAsync semantics, this transition's
     /// key release visible to them); one-level continuation activation; transitive continuation
-    /// cancellation.
+    /// cancellation; and <see cref="JobTransition.Checkpoint"/>, the workflow instance update.
+    /// <para>
+    /// <b>Checkpoint ordering.</b> The fence is evaluated first: if it rejects, the call returns
+    /// <see langword="false"/> and no checkpoint is attempted — a worker that no longer owns the job
+    /// has no business advancing the instance. If the fence holds but
+    /// <see cref="WorkflowCheckpoint.ExpectedRevision"/> does not match the stored revision (or the
+    /// instance is missing), the whole transition rolls back and
+    /// <see cref="MillraceConcurrencyException"/> is thrown: the caller reloads and retries the
+    /// merge. The two outcomes stay distinguishable because they demand different reactions.
+    /// </para>
     /// </remarks>
+    /// <exception cref="MillraceConcurrencyException">
+    /// A checkpoint was supplied and its revision was stale, or its instance does not exist.
+    /// Nothing changed.
+    /// </exception>
     ValueTask<bool> ApplyAsync(JobTransition transition, CancellationToken ct);
 
     /// <summary>

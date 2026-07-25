@@ -56,6 +56,17 @@ public sealed record JobTransition
     /// <summary>Records inserted atomically with the transition (workflow engine, 0.3).</summary>
     public IReadOnlyList<JobRecord> Enqueue { get; init; } = [];
 
+    /// <summary>
+    /// A workflow instance update applied in the same transaction (workflow engine, 0.3).
+    /// </summary>
+    /// <remarks>
+    /// Together with <see cref="Enqueue"/> this makes the §6.2 checkpoint one atom: the instance
+    /// advances, the next activity is enqueued, and this job completes, or none of it happens.
+    /// A stale revision throws <see cref="MillraceConcurrencyException"/> and changes nothing —
+    /// see <see cref="WorkflowCheckpoint"/> for why that is an exception rather than a false return.
+    /// </remarks>
+    public WorkflowCheckpoint? Checkpoint { get; init; }
+
     /// <summary>Direct Awaiting children of <see cref="JobId"/> become <see cref="JobState.Enqueued"/>.</summary>
     public bool ActivateContinuations { get; init; }
 

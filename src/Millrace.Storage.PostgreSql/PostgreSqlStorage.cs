@@ -292,6 +292,14 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
             }
         }
 
+        // The fence has held, so this worker still owns the job and may advance the instance. A
+        // stale revision throws, the transaction is never committed, and the fenced UPDATE above
+        // rolls back with it — the whole transition is all-or-nothing.
+        if (transition.Checkpoint is { } checkpoint)
+        {
+            await ApplyCheckpointAsync(conn, checkpoint, ct).ConfigureAwait(false);
+        }
+
         foreach (var record in transition.Enqueue)
         {
             await InsertCoreAsync(conn, record, wakeups, ct).ConfigureAwait(false);
@@ -611,6 +619,24 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
         await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await UpdateInstanceCoreAsync(conn, instance, expectedRevision, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Applies the checkpoint carried by a transition, on that transition's connection.</summary>
+    private Task ApplyCheckpointAsync(NpgsqlConnection conn, WorkflowCheckpoint checkpoint, CancellationToken ct)
+        => UpdateInstanceCoreAsync(conn, checkpoint.Instance, checkpoint.ExpectedRevision, ct);
+
+    /// <summary>
+    /// The single instance-update implementation, shared by the standalone call and the
+    /// transition-carried checkpoint.
+    /// </summary>
+    /// <remarks>
+    /// Shared deliberately: the two paths must be indistinguishable in effect, and two copies of
+    /// this SQL would drift the moment a column is added.
+    /// </remarks>
+    private async Task UpdateInstanceCoreAsync(
+        NpgsqlConnection conn, WorkflowInstanceRecord instance, long expectedRevision, CancellationToken ct)
+    {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_schema}.workflow_instances

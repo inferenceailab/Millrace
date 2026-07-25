@@ -138,6 +138,11 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
             wakeups = [];
             try
             {
+                // First, so a revision conflict throws before anything else is touched. The fence
+                // has already passed at this point: a worker that no longer owns the job never
+                // reaches here to advance an instance.
+                CheckpointCore(transition.Checkpoint, undo);
+
                 TransitionCore(entry, transition, undo, wakeups);
 
                 foreach (var record in transition.Enqueue)
@@ -356,16 +361,38 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
     {
         lock (_gate)
         {
-            if (!_instances.TryGetValue(instance.Id, out var stored) || stored.Revision != expectedRevision)
-            {
-                throw new MillraceConcurrencyException(
-                    $"Workflow instance '{instance.Id}' revision conflict (expected {expectedRevision}).");
-            }
-
-            _instances[instance.Id] = instance with { Revision = expectedRevision + 1 };
+            UpdateInstanceCore(instance, expectedRevision, undo: null);
         }
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Applies the checkpoint carried by a transition. Called while holding the gate and inside the
+    /// transition's undo scope, so a later failure restores the previous instance.
+    /// </summary>
+    private void CheckpointCore(WorkflowCheckpoint? checkpoint, List<Action> undo)
+    {
+        if (checkpoint is not null)
+        {
+            UpdateInstanceCore(checkpoint.Instance, checkpoint.ExpectedRevision, undo);
+        }
+    }
+
+    /// <summary>
+    /// The single instance-update implementation, shared by the standalone call and the
+    /// transition-carried checkpoint, so the two can never diverge in effect.
+    /// </summary>
+    private void UpdateInstanceCore(WorkflowInstanceRecord instance, long expectedRevision, List<Action>? undo)
+    {
+        if (!_instances.TryGetValue(instance.Id, out var stored) || stored.Revision != expectedRevision)
+        {
+            throw new MillraceConcurrencyException(
+                $"Workflow instance '{instance.Id}' revision conflict (expected {expectedRevision}).");
+        }
+
+        _instances[instance.Id] = instance with { Revision = expectedRevision + 1 };
+        undo?.Add(() => _instances[instance.Id] = stored);
     }
 
     public ValueTask AddBookmarkAsync(BookmarkRecord bookmark, CancellationToken ct)
