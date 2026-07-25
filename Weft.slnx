@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Weft.Storage.PostgreSql/Weft.Storage.PostgreSql.csproj" />
+    <Project Path="src/Weft.Storage.Verification/Weft.Storage.Verification.csproj" />
+    <Project Path="src/Weft/Weft.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Weft.Storage.PostgreSql.Tests/Weft.Storage.PostgreSql.Tests.csproj" />
+    <Project Path="test/Weft.Tests/Weft.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Conformance test kit (TCK) for Weft storage providers. Inherit the suites in your provider's test project to verify the atomicity contract.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Weft\Weft.csproj" />
+    <PackageReference Include="xunit.v3.assert" />
+    <PackageReference Include="xunit.v3.extensibility.core" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+</Project>
