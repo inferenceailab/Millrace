@@ -22,7 +22,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
     private const string JobColumns =
         "id, queue, state, priority, invocation, retry, created_at, due_at, worker_id, " +
         "lease_until, attempt, failures, cancel_requested, idempotency_key, tenant_id, " +
-        "parent_id, last_error, finished_at, workflow_instance_id, activity_node_id";
+        "parent_id, last_error, finished_at, workflow_instance_id, activity_node_id, requeued_from";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.General);
 
@@ -74,7 +74,8 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 last_error text,
                 finished_at timestamptz,
                 workflow_instance_id uuid,
-                activity_node_id text);
+                activity_node_id text,
+                requeued_from uuid);
             CREATE UNIQUE INDEX IF NOT EXISTS ux_jobs_active_key
                 ON {_schema}.jobs (tenant_id, idempotency_key) NULLS NOT DISTINCT
                 WHERE idempotency_key IS NOT NULL AND state IN ({ActiveStates});
@@ -185,7 +186,9 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         {
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
-                claimed.Add((ReadJob(reader), reader.GetInt64(20)));
+                // By name, not position: this trails the JobColumns list, so a positional read here
+                // silently reinterprets the wrong column the moment a column is added.
+                claimed.Add((ReadJob(reader), reader.GetInt64(reader.GetOrdinal("seq"))));
             }
         }
 
@@ -827,7 +830,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                     INSERT INTO {_schema}.jobs ({JobColumns})
                     VALUES (@id, @queue, @state, @priority, @invocation, @retry, @created, @due,
                             @worker, @lease, @attempt, @failures, @cancel, @key, @tenant,
-                            @parent, @error, @finished, @wf, @activity)
+                            @parent, @error, @finished, @wf, @activity, @requeued)
                     {conflict}
                     RETURNING id
                     """;
@@ -851,6 +854,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 cmd.Parameters.AddWithValue("finished", Db(effective.FinishedAt?.ToUniversalTime()));
                 cmd.Parameters.AddWithValue("wf", Db(effective.WorkflowInstanceId?.Value));
                 cmd.Parameters.AddWithValue("activity", Db(effective.ActivityNodeId));
+        cmd.Parameters.AddWithValue("requeued", Db(effective.RequeuedFrom?.Value));
 
                 if (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is Guid inserted)
                 {
@@ -969,6 +973,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         FinishedAt = reader.IsDBNull(17) ? null : reader.GetFieldValue<DateTimeOffset>(17),
         WorkflowInstanceId = reader.IsDBNull(18) ? null : new WorkflowInstanceId(reader.GetGuid(18)),
         ActivityNodeId = reader.IsDBNull(19) ? null : reader.GetString(19),
+        RequeuedFrom = reader.IsDBNull(20) ? null : new JobId(reader.GetGuid(20)),
     };
 
     private static RecurringJobRecord ReadRecurring(NpgsqlDataReader reader) => new()

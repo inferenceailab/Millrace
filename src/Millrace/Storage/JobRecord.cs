@@ -63,6 +63,18 @@ public sealed record JobRecord
     /// <summary>Parent job for continuations (state <see cref="JobState.Awaiting"/>).</summary>
     public JobId? ParentId { get; init; }
 
+    /// <summary>
+    /// The job this one was requeued from, if any (§11.19).
+    /// </summary>
+    /// <remarks>
+    /// Requeue mints a new job rather than reviving a terminal one, because every other part of the
+    /// contract treats a terminal record as immutable. This is what keeps the two ends visible to
+    /// each other in the dashboard. Distinct from <see cref="ParentId"/>, which means a continuation
+    /// and carries the <see cref="JobState.Awaiting"/> activation and cancel-cascade semantics —
+    /// a requeue inherits neither.
+    /// </remarks>
+    public JobId? RequeuedFrom { get; init; }
+
     public string? LastError { get; init; }
 
     public DateTimeOffset? FinishedAt { get; init; }
