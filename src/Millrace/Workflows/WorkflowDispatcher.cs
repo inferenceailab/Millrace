@@ -73,6 +73,12 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             .ConfigureAwait(false);
     }
 
+    public Task FailActivityAsync(Guid instanceId, string nodeId, CancellationToken ct)
+        => RunAsync(instanceId, walker => walker.FailAsync(nodeId), ct);
+
+    public Task CompensateAsync(Guid instanceId, string sagaId, string stepNodeId, CancellationToken ct)
+        => RunAsync(instanceId, walker => walker.CompensateAsync(sagaId, stepNodeId, ct), ct);
+
     private async Task RunAsync(Guid instanceId, Func<Walker, Task> run, CancellationToken ct)
     {
         var id = new WorkflowInstanceId(instanceId);
@@ -102,6 +108,10 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
 
         public abstract Task ResumeAsync(
             string signalName, string correlationId, string? payloadJson, CancellationToken ct);
+
+        public abstract Task FailAsync(string nodeId);
+
+        public abstract Task CompensateAsync(string sagaId, string stepNodeId, CancellationToken ct);
     }
 
     private sealed class Walker<TData> : Walker
@@ -167,6 +177,130 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// An activity exhausted its retries: unwind its saga, or record the instance as failed.
+        /// </summary>
+        public override Task FailAsync(string nodeId)
+        {
+            var node = Node(nodeId);
+            var sagas = new Dictionary<string, SagaState>(_cursor.Sagas, StringComparer.Ordinal);
+
+            if (node.SagaId is { } sagaId
+                && sagas.TryGetValue(sagaId, out var saga)
+                && !saga.Compensating
+                && saga.Completed.Count > 0)
+            {
+                // Unwind from the most recent completed step backwards. Marked compensating first,
+                // so a second failure arriving later cannot restart the unwind from the top.
+                sagas[sagaId] = saga with { Compensating = true };
+                Checkpoint(
+                    WorkflowInstanceState.Running,
+                    joins: new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal),
+                    waits: new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal),
+                    sagas: sagas,
+                    scheduled: [WorkflowJobFactory.CreateCompensation(
+                        _instance, sagaId, saga.Completed[^1], _owner._options, _owner._time)],
+                    bookmarks: []);
+
+                return Task.CompletedTask;
+            }
+
+            // A failure while already compensating is a compensation that failed. Parking rather
+            // than forcing a terminal state is deliberate: a half-undone saga is exactly where an
+            // operator should look before anything else happens to it.
+            var compensationFailed = node.SagaId is { } id
+                && sagas.TryGetValue(id, out var open)
+                && open.Compensating;
+
+            // Otherwise there was nothing to undo, and recording the failure is what keeps a dead
+            // activity from leaving the instance Running forever.
+            Checkpoint(
+                compensationFailed ? WorkflowInstanceState.Suspended : WorkflowInstanceState.Failed,
+                joins: new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal),
+                waits: new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal),
+                sagas: sagas,
+                scheduled: [],
+                bookmarks: []);
+
+            return Task.CompletedTask;
+        }
+
+        /// <summary>Runs one compensation and schedules the next one backwards.</summary>
+        public override async Task CompensateAsync(string sagaId, string stepNodeId, CancellationToken ct)
+        {
+            var sagas = new Dictionary<string, SagaState>(_cursor.Sagas, StringComparer.Ordinal);
+            if (!sagas.TryGetValue(sagaId, out var saga) || saga.Completed.Count == 0)
+            {
+                return; // already unwound — a duplicate delivery or a retry after the checkpoint
+            }
+
+            if (_definition.Compensations.TryGetValue(stepNodeId, out var compensationType))
+            {
+                var activity = ActivatorUtilities.CreateInstance(_owner._services, compensationType);
+                var context = new ActivityContext<TData>(
+                    _data, _instance.Id, stepNodeId, _instance.DefinitionId, _instance.DefinitionVersion);
+                await ((IActivity<TData>)activity).ExecuteAsync(context, ct).ConfigureAwait(false);
+            }
+
+            var remaining = saga.Completed.Take(saga.Completed.Count - 1).ToList();
+            sagas[sagaId] = saga with { Completed = remaining, Compensating = true };
+
+            var next = remaining.Count > 0
+                ? new List<JobRecord>
+                {
+                    WorkflowJobFactory.CreateCompensation(
+                        _instance, sagaId, remaining[^1], _owner._options, _owner._time),
+                }
+                : [];
+
+            if (next.Count == 0)
+            {
+                sagas.Remove(sagaId);
+            }
+
+            Checkpoint(
+                next.Count == 0 ? WorkflowInstanceState.Compensated : WorkflowInstanceState.Running,
+                joins: new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal),
+                waits: new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal),
+                sagas: sagas,
+                scheduled: next,
+                bookmarks: []);
+        }
+
+        /// <summary>Publishes a checkpoint with an explicit state, for the paths that do not route.</summary>
+        private void Checkpoint(
+            WorkflowInstanceState state,
+            Dictionary<string, WorkflowJoin> joins,
+            Dictionary<string, WorkflowWait> waits,
+            Dictionary<string, SagaState> sagas,
+            List<JobRecord> scheduled,
+            List<BookmarkRecord> bookmarks)
+        {
+            var updated = _instance with
+            {
+                DataJson = JsonSerializer.Serialize(_data, _owner._json),
+                CursorJson = JsonSerializer.Serialize(
+                    new WorkflowCursor
+                    {
+                        Joins = joins,
+                        Waits = waits,
+                        Sagas = sagas,
+                        Completed = state == WorkflowInstanceState.Completed,
+                    },
+                    _owner._json),
+                State = state,
+                UpdatedAt = _owner._time.GetUtcNow(),
+            };
+
+            _owner._effects.Checkpoint = new WorkflowCheckpoint
+            {
+                Instance = updated,
+                ExpectedRevision = _instance.Revision,
+            };
+            _owner._effects.Enqueue.AddRange(scheduled);
+            _owner._effects.Bookmarks.AddRange(bookmarks);
+        }
+
         private WorkflowNode Node(string id)
             => _definition.Graph.Nodes.FirstOrDefault(n => n.Id == id)
                ?? throw new InvalidOperationException(
@@ -217,7 +351,23 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             string? joinKey, string? consumedWait)
         {
             var plan = new Plan(_owner, _definition, basis, cursor, joinKey, consumedWait);
+
+            // Record the step before routing: a saga has to know what it did in order to undo it,
+            // and the failure that triggers the undo arrives long after this execution is gone.
+            if (from.SagaId is { } stepSaga && from.Kind == WorkflowNodeKind.Activity)
+            {
+                plan.RecordSagaStep(stepSaga, from.Id);
+            }
+
             plan.Route(from, data);
+
+            // A saga whose steps have all run has nothing left to undo, so it stops being tracked.
+            if (from.SagaId is { } finishedSaga
+                && !plan.Scheduled.Any(j => _definition.Graph.Nodes
+                    .First(n => n.Id == j.ActivityNodeId).SagaId == finishedSaga))
+            {
+                plan.Sagas.Remove(finishedSaga);
+            }
 
             // A scheduled timeout is not progress, so it does not keep an instance Running: an
             // instance whose only outstanding work is "wait for a signal, or give up at T" is
@@ -229,7 +379,10 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             {
                 DataJson = JsonSerializer.Serialize(data, _owner._json),
                 CursorJson = JsonSerializer.Serialize(
-                    new WorkflowCursor { Joins = plan.Joins, Waits = plan.Waits, Completed = completed },
+                    new WorkflowCursor
+                    {
+                        Joins = plan.Joins, Waits = plan.Waits, Sagas = plan.Sagas, Completed = completed,
+                    },
                     _owner._json),
                 State = completed
                     ? WorkflowInstanceState.Completed
@@ -275,7 +428,22 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             /// </summary>
             public List<JobRecord> Timeouts { get; } = [];
 
+            public Dictionary<string, SagaState> Sagas { get; } =
+                new(cursor.Sagas, StringComparer.Ordinal);
+
             public List<BookmarkRecord> NewBookmarks { get; } = [];
+
+            /// <summary>Appends a completed step to its saga's undo list.</summary>
+            public void RecordSagaStep(string sagaId, string stepNodeId)
+            {
+                var saga = Sagas.GetValueOrDefault(sagaId) ?? new SagaState();
+                if (saga.Compensating || saga.Completed.Contains(stepNodeId))
+                {
+                    return; // a retry re-running a step must not record it twice
+                }
+
+                Sagas[sagaId] = saga with { Completed = [.. saga.Completed, stepNodeId] };
+            }
 
             public void Route(WorkflowNode from, TData data)
             {
@@ -347,6 +515,11 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                         // An empty arm is not an error: the flow simply continues after the If.
                         return arm ?? node.Next;
                     }
+
+                    case WorkflowNodeKind.Saga:
+                        // Entering a saga is pure routing: the body is an ordinary sequence whose
+                        // steps happen to be recorded as they complete.
+                        return node.Body ?? node.Next;
 
                     case WorkflowNodeKind.Parallel:
                         return OpenFanOut(node, node.Branches.Select(b => (b, 0)).ToList(), out owningJoin);

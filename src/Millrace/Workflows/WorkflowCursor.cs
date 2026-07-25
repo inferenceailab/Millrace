@@ -36,6 +36,10 @@ public sealed record WorkflowCursor
     public IReadOnlyDictionary<string, WorkflowWait> Waits { get; init; } =
         new Dictionary<string, WorkflowWait>(StringComparer.Ordinal);
 
+    /// <summary>Open sagas, keyed by the saga node's id.</summary>
+    public IReadOnlyDictionary<string, SagaState> Sagas { get; init; } =
+        new Dictionary<string, SagaState>(StringComparer.Ordinal);
+
     /// <summary>True once no activity remains in flight and no join is open.</summary>
     public bool Completed { get; init; }
 
@@ -44,6 +48,25 @@ public sealed record WorkflowCursor
 
     /// <summary>The key a wait is stored under.</summary>
     public static string WaitKey(string signalName, string correlationId) => $"{signalName}|{correlationId}";
+}
+
+/// <summary>What a saga has done so far, and therefore what it would have to undo.</summary>
+public sealed record SagaState
+{
+    /// <summary>
+    /// Steps completed so far, oldest first. Compensation walks this backwards.
+    /// </summary>
+    /// <remarks>
+    /// Recorded as steps succeed rather than derived from the graph, because which steps ran depends
+    /// on the data — a saga containing a branch does not have one fixed step list.
+    /// </remarks>
+    public IReadOnlyList<string> Completed { get; init; } = [];
+
+    /// <summary>
+    /// True once unwinding has begun. A second failure while compensating must not restart the
+    /// unwind from the top.
+    /// </summary>
+    public bool Compensating { get; init; }
 }
 
 /// <summary>Where a suspended instance continues when its signal arrives, or its wait times out.</summary>

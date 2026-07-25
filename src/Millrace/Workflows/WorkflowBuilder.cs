@@ -34,6 +34,9 @@ internal sealed class GraphBuilderState<TData>
 
     public Dictionary<string, NodeBinding<TData>> Bindings { get; } = [];
 
+    /// <summary>Compensating activity type per saga step, by step node id.</summary>
+    public Dictionary<string, Type> Compensations { get; } = [];
+
     /// <summary>
     /// Deterministic ids from build order. <c>Build</c> is ordinary code run the same way every
     /// time, so the same definition yields the same ids in every process — which persisted cursors
@@ -51,6 +54,7 @@ internal sealed class GraphBuilderState<TData>
             WorkflowNodeKind.ForEach => "each",
             WorkflowNodeKind.Delay => "delay",
             WorkflowNodeKind.WaitForSignal => "sig",
+            WorkflowNodeKind.Saga => "saga",
             _ => "n",
         };
         return $"{prefix}{n}";
@@ -64,7 +68,7 @@ internal sealed class GraphBuilderState<TData>
 internal sealed class WorkflowBuilder<TData> : IWorkflowBuilder<TData>
 {
     private readonly GraphBuilderState<TData> _state;
-    private readonly List<string> _sequence = [];
+    internal readonly List<string> _sequence = [];
 
     public WorkflowBuilder(GraphBuilderState<TData> state) => _state = state;
 
@@ -155,6 +159,61 @@ internal sealed class WorkflowBuilder<TData> : IWorkflowBuilder<TData>
             Collection = data => (System.Collections.IEnumerable)(compiled(data) ?? Array.Empty<TItem>()),
         };
         return this;
+    }
+
+    public IWorkflowBuilder<TData> Saga(Action<ISagaBuilder<TData>> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        var id = _state.NextId(WorkflowNodeKind.Saga);
+        var body = new WorkflowBuilder<TData>(_state);
+        steps(new SagaBuilder(body, _state));
+
+        if (body.Entry is null)
+        {
+            throw new ArgumentException("A saga needs at least one step.", nameof(steps));
+        }
+
+        Append(new WorkflowNode
+        {
+            Id = id,
+            Kind = WorkflowNodeKind.Saga,
+            Body = body.Entry,
+        });
+        return this;
+    }
+
+    /// <summary>
+    /// Saga steps are ordinary activity nodes; <c>CompensateWith</c> annotates the one just added.
+    /// </summary>
+    private sealed class SagaBuilder(WorkflowBuilder<TData> body, GraphBuilderState<TData> state)
+        : ISagaBuilder<TData>
+    {
+        private string? _last;
+
+        public ISagaBuilder<TData> Then<TActivity>() where TActivity : IActivity<TData>
+        {
+            body.Then<TActivity>();
+            _last = body._sequence[^1];
+            return this;
+        }
+
+        public ISagaBuilder<TData> CompensateWith<TActivity>() where TActivity : IActivity<TData>
+        {
+            if (_last is null)
+            {
+                throw new InvalidOperationException(
+                    "CompensateWith must follow the step it undoes — call Then<T>() first.");
+            }
+
+            var index = state.Nodes.FindIndex(n => n.Id == _last);
+            state.Nodes[index] = state.Nodes[index] with
+            {
+                Compensation = TypeNameFormatter.Format(typeof(TActivity)),
+            };
+            state.Compensations[_last] = typeof(TActivity);
+            return this;
+        }
     }
 
     public IWorkflowBuilder<TData> Delay(TimeSpan duration)

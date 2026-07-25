@@ -66,12 +66,40 @@ internal static class WorkflowJobFactory
                 null,
             ]);
 
+    public static JobRecord CreateFailure(
+        JobRecord failed, WorkflowInstanceId instanceId, string nodeId, MillraceOptions options, TimeProvider time)
+        => Build(
+            instanceId, failed.TenantId, nodeId, delay: null, options, time,
+            nameof(IWorkflowDispatcher.FailActivityAsync),
+            [GuidType, StringType, TokenType],
+            [Json(instanceId.Value, options), Json(nodeId, options), null]);
+
+    public static JobRecord CreateCompensation(
+        WorkflowInstanceRecord instance, string sagaId, string stepNodeId,
+        MillraceOptions options, TimeProvider time)
+        => Build(
+            instance.Id, instance.TenantId, stepNodeId, delay: null, options, time,
+            nameof(IWorkflowDispatcher.CompensateAsync),
+            [GuidType, StringType, StringType, TokenType],
+            [Json(instance.Id.Value, options), Json(sagaId, options), Json(stepNodeId, options), null]);
+
     private static string Json<T>(T value, MillraceOptions options)
         => JsonSerializer.Serialize(value, options.SerializerOptions);
 
     private static JobRecord Build(
         WorkflowInstanceRecord instance, string nodeId, TimeSpan? delay, MillraceOptions options,
         TimeProvider time, string method, IReadOnlyList<string> parameterTypes,
+        IReadOnlyList<string?> argumentsJson)
+        => Build(
+            instance.Id, instance.TenantId, nodeId, delay, options, time, method, parameterTypes, argumentsJson);
+
+    /// <summary>
+    /// The id-and-tenant form, for the failure notification: it is built from a dead job rather than
+    /// from an instance record, because the worker has the job and not the instance.
+    /// </summary>
+    private static JobRecord Build(
+        WorkflowInstanceId instanceId, string? tenantId, string nodeId, TimeSpan? delay,
+        MillraceOptions options, TimeProvider time, string method, IReadOnlyList<string> parameterTypes,
         IReadOnlyList<string?> argumentsJson)
     {
         var now = time.GetUtcNow();
@@ -90,9 +118,9 @@ internal static class WorkflowJobFactory
             },
             Retry = options.DefaultRetry,
             CreatedAt = now,
-            TenantId = instance.TenantId,
+            TenantId = tenantId,
             // Correlation the dashboard reads: every workflow job names its instance and node.
-            WorkflowInstanceId = instance.Id,
+            WorkflowInstanceId = instanceId,
             ActivityNodeId = nodeId,
         };
     }

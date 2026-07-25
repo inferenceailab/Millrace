@@ -51,4 +51,21 @@ public interface IWorkflowDispatcher
     /// nothing and does nothing. No extra coordination, and no window where both fire.
     /// </remarks>
     Task TimeoutSignalAsync(Guid instanceId, string signalName, string correlationId, CancellationToken ct);
+
+    /// <summary>
+    /// Reacts to an activity that failed past its retry policy: unwinds its saga if it was inside
+    /// one, and otherwise records the instance as failed.
+    /// </summary>
+    /// <remarks>
+    /// Enqueued by the substrate atomically with the dead-letter transition, because nothing of the
+    /// engine is running when a job dies — the activity threw and the worker finished the job on its
+    /// own.
+    /// </remarks>
+    Task FailActivityAsync(Guid instanceId, string nodeId, CancellationToken ct);
+
+    /// <summary>
+    /// Runs one step's compensating activity and schedules the next one backwards, or finishes the
+    /// unwind.
+    /// </summary>
+    Task CompensateAsync(Guid instanceId, string sagaId, string stepNodeId, CancellationToken ct);
 }

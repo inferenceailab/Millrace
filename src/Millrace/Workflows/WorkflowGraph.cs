@@ -20,6 +20,12 @@ public enum WorkflowNodeKind
 
     /// <summary>Suspends until a correlated signal arrives; holds no job while waiting.</summary>
     WaitForSignal = 5,
+
+    /// <summary>
+    /// A sequence whose completed steps are undone in reverse if a later one fails past its retry
+    /// policy.
+    /// </summary>
+    Saga = 6,
 }
 
 /// <summary>
@@ -83,6 +89,24 @@ public sealed record WorkflowNode
 
     /// <summary>Optional timeout after which a wait gives up.</summary>
     public TimeSpan? Timeout { get; init; }
+
+    /// <summary>
+    /// The activity that undoes this one, for a step inside a <see cref="WorkflowNodeKind.Saga"/>.
+    /// </summary>
+    /// <remarks>
+    /// A step without one is still part of the saga and still recorded as completed — it simply has
+    /// nothing to undo, which is normal for a read or a notification.
+    /// </remarks>
+    public string? Compensation { get; init; }
+
+    /// <summary>
+    /// The saga this node belongs to, assigned at compile time by walking each saga's body.
+    /// </summary>
+    /// <remarks>
+    /// Computed rather than threaded through the running jobs: a failed step has to find its saga
+    /// from the graph alone, because the job that failed carries only its own node id.
+    /// </remarks>
+    public string? SagaId { get; init; }
 }
 
 /// <summary>
