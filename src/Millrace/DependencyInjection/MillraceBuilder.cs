@@ -64,6 +64,10 @@ public sealed class MillraceBuilder(IServiceCollection services)
 
         Services.AddSingleton(definition);
         Services.TryAddSingleton(sp => new WorkflowRegistry(sp.GetServices<WorkflowDefinition>()));
+        Services.TryAddSingleton<IWorkflowClient, WorkflowClient>();
+        // Scoped: the dispatcher writes into the per-execution JobSideEffects, so it must not
+        // outlive one job.
+        Services.TryAddScoped<IWorkflowDispatcher, WorkflowDispatcher>();
         return this;
     }
 

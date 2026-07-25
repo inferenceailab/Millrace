@@ -19,7 +19,15 @@ public sealed class JobExecutor(
 {
     private readonly JsonSerializerOptions _json = options.Value.SerializerOptions;
 
-    public async Task ExecuteAsync(JobRecord job, CancellationToken ct)
+    /// <summary>
+    /// Runs the job and returns the effects it asked to have committed with its own completion.
+    /// </summary>
+    /// <remarks>
+    /// The side-effect accumulator is resolved from the execution scope <em>after</em> the call, so
+    /// a handler can describe a checkpoint or follow-on jobs without being able to commit anything
+    /// itself — the worker folds them into the terminal transition.
+    /// </remarks>
+    public async Task<JobSideEffects> ExecuteAsync(JobRecord job, CancellationToken ct)
     {
         var serviceType = TypeNameFormatter.Resolve(job.Invocation.TypeName);
         var method = ResolveMethod(serviceType, job.Invocation);
@@ -46,6 +54,8 @@ public sealed class JobExecutor(
         var target = scope.ServiceProvider.GetRequiredService(serviceType);
         var result = method.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, arguments, culture: null);
         await ((Task)result!).ConfigureAwait(false);
+
+        return scope.ServiceProvider.GetRequiredService<JobSideEffects>();
     }
 
     /// <summary>

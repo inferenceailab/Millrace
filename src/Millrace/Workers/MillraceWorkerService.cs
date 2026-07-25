@@ -170,9 +170,9 @@ internal sealed class MillraceWorkerService(
 
             try
             {
-                await executor.ExecuteAsync(job, inFlight.Cts.Token).ConfigureAwait(false);
+                var effects = await executor.ExecuteAsync(job, inFlight.Cts.Token).ConfigureAwait(false);
                 await ApplyTransitionAsync(Terminal(job, JobState.Succeeded, job.Failures,
-                    error: null, activateContinuations: true)).ConfigureAwait(false);
+                    error: null, activateContinuations: true, effects: effects)).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (inFlight.Cts.IsCancellationRequested)
             {
@@ -417,7 +417,8 @@ internal sealed class MillraceWorkerService(
 
     private JobTransition Terminal(
         JobRecord job, JobState state, int failures, string? error,
-        bool activateContinuations = false, bool cancelContinuations = false) => new()
+        bool activateContinuations = false, bool cancelContinuations = false,
+        JobSideEffects? effects = null) => new()
     {
         JobId = job.Id,
         ExpectedWorkerId = _workerId,
@@ -428,6 +429,10 @@ internal sealed class MillraceWorkerService(
         FinishedAt = time.GetUtcNow(),
         ActivateContinuations = activateContinuations,
         CancelContinuations = cancelContinuations,
+        // Only a successful execution contributes effects: a failing activity must not advance its
+        // workflow, and a cancelled one has nothing to say.
+        Enqueue = effects is null ? [] : effects.Enqueue,
+        Checkpoint = effects?.Checkpoint,
     };
 
     private JobTransition Release(JobRecord job) => new()

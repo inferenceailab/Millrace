@@ -106,8 +106,9 @@ public sealed class WorkflowDefinitionTests
         Assert.Null(branch.WhenFalse); // no else was declared
         Assert.Equal(WorkflowNodeKind.WaitForSignal, byId[branch.WhenTrue].Kind);
 
-        // The branch body ends rather than rejoining: the engine returns to the If's Next.
-        Assert.Null(byId[branch.WhenTrue].Next);
+        // The arm rejoins statically: its last node points at whatever follows the If, because an
+        // arm always rejoins and that is a property of the graph rather than of a running instance.
+        Assert.Equal(branch.Next, byId[branch.WhenTrue].Next);
     }
 
     [Fact]

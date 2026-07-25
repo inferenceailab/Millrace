@@ -31,6 +31,55 @@ public abstract class WorkflowDefinition
     public string ExportGraph(JsonSerializerOptions? options = null)
         => JsonSerializer.Serialize(Graph, options ?? DefaultExportOptions);
 
+    /// <summary>
+    /// Wires the last node of each <c>If</c> arm to whatever follows the <c>If</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An arm always rejoins — unlike a <c>Parallel</c> branch, which must wait at a join — so the
+    /// rejoin is a static property of the graph and belongs in the shape rather than in a runtime
+    /// return-address stack. It also makes the exported graph read correctly: an arm visibly flows
+    /// into the step after the condition.
+    /// </para>
+    /// <para>
+    /// Processed in reverse build order, which is outermost-first: the builder emits a branch's
+    /// nodes before the node that owns them. An inner <c>If</c> must learn its own continuation from
+    /// the outer one before wiring its own arms, or a nested arm ends up pointing at the null the
+    /// inner <c>If</c> had at the time.
+    /// </para>
+    /// </remarks>
+    private static List<WorkflowNode> LinkBranchExits(List<WorkflowNode> nodes)
+    {
+        var byId = nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
+
+        for (var i = nodes.Count - 1; i >= 0; i--)
+        {
+            var branchNode = byId[nodes[i].Id];
+            if (branchNode.Kind != WorkflowNodeKind.If)
+            {
+                continue;
+            }
+
+            foreach (var arm in new[] { branchNode.WhenTrue, branchNode.WhenFalse })
+            {
+                if (arm is null)
+                {
+                    continue;
+                }
+
+                var terminal = arm;
+                while (byId[terminal].Next is { } next)
+                {
+                    terminal = next;
+                }
+
+                byId[terminal] = byId[terminal] with { Next = branchNode.Next };
+            }
+        }
+
+        return nodes.Select(n => byId[n.Id]).ToList();
+    }
+
     private static readonly JsonSerializerOptions DefaultExportOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
@@ -74,7 +123,7 @@ public abstract class WorkflowDefinition
             DefinitionId = workflow.Id,
             Version = workflow.Version,
             Start = builder.Entry,
-            Nodes = state.Nodes,
+            Nodes = LinkBranchExits(state.Nodes),
         };
 
         return new WorkflowDefinition<TData>(workflow.Id, workflow.Version, graph, state.Bindings);

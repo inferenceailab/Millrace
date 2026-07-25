@@ -57,6 +57,17 @@ public sealed class MillraceOptions
     /// <summary>Applied when <see cref="EnqueueOptions.Retry"/> is not set.</summary>
     public Retry DefaultRetry { get; set; } = Retry.Exponential(5);
 
+    /// <summary>
+    /// Queue that workflow activity jobs are enqueued to.
+    /// </summary>
+    /// <remarks>
+    /// Explicit rather than derived from <see cref="Queues"/>: a node configured to claim only, say,
+    /// <c>reports</c> would otherwise enqueue activities somewhere nothing claims from, and the
+    /// instance would hang with no error anywhere. Every node in a deployment must agree on this
+    /// value, and at least one must claim from it.
+    /// </remarks>
+    public string WorkflowQueue { get; set; } = DefaultQueue;
+
     /// <summary>Used for job arguments and workflow data documents.</summary>
     public JsonSerializerOptions SerializerOptions { get; set; } = new(JsonSerializerDefaults.General);
 }

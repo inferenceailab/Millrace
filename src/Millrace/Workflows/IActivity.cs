@@ -45,6 +45,17 @@ public sealed class ActivityContext<TData>
     public string DefinitionId { get; }
 
     /// <summary>
+    /// Zero-based iteration index when this activity runs inside a <c>ForEach</c> body; zero
+    /// otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The body sees the index rather than the item, because the item is not separate state — it
+    /// lives in <see cref="Data"/>, which is the only thing checkpointed. An activity indexes the
+    /// same collection the loop selected.
+    /// </remarks>
+    public int LoopIndex { get; init; }
+
+    /// <summary>
     /// The definition version this instance started on. An in-flight instance always finishes on
     /// the version it started with, so this can differ from the latest registered version.
     /// </summary>
