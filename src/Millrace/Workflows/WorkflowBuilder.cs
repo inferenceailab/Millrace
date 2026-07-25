@@ -214,6 +214,19 @@ internal sealed class WorkflowBuilder<TData> : IWorkflowBuilder<TData>
             state.Compensations[_last] = typeof(TActivity);
             return this;
         }
+
+        public ISagaBuilder<TData> OnFailure(StepFailurePolicy policy)
+        {
+            if (_last is null)
+            {
+                throw new InvalidOperationException(
+                    "OnFailure must follow the step it governs — call Then<T>() first.");
+            }
+
+            var index = state.Nodes.FindIndex(n => n.Id == _last);
+            state.Nodes[index] = state.Nodes[index] with { OnFailure = policy };
+            return this;
+        }
     }
 
     public IWorkflowBuilder<TData> Delay(TimeSpan duration)

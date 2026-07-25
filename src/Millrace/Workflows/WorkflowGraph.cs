@@ -107,6 +107,57 @@ public sealed record WorkflowNode
     /// from the graph alone, because the job that failed carries only its own node id.
     /// </remarks>
     public string? SagaId { get; init; }
+
+    /// <summary>
+    /// What happens when this step exhausts its retries (§6.4, §11.28).
+    /// </summary>
+    /// <remarks>
+    /// Null means <see cref="StepFailurePolicy.Retry"/> — the retry policy governs, and exhausting
+    /// it falls through to the saga's default behaviour of unwinding. Serialized, so an instance
+    /// that started under one policy keeps it even if the definition is edited.
+    /// </remarks>
+    public StepFailurePolicy? OnFailure { get; init; }
+}
+
+/// <summary>
+/// What a saga step does when its retries are exhausted (§6.4).
+/// </summary>
+/// <remarks>
+/// These decide what <em>exhaustion</em> means, not whether to retry: by the time any of them is
+/// consulted the job has already spent its retry budget. So <see cref="Retry"/> is not "try again",
+/// it is "the retry policy was the whole answer" — which is why it is the default and why the other
+/// three are the interesting ones.
+/// </remarks>
+public enum StepFailurePolicy
+{
+    /// <summary>
+    /// The retry policy governs; exhausting it unwinds the saga. The default, and the only
+    /// behaviour before §11.28.
+    /// </summary>
+    Retry = 0,
+
+    /// <summary>Unwind the saga immediately. Identical to <see cref="Retry"/> once retries are spent.</summary>
+    Compensate = 1,
+
+    /// <summary>
+    /// Park the instance for an operator, undoing nothing.
+    /// </summary>
+    /// <remarks>
+    /// For a step where unwinding is the wrong reflex — a partial refund, an external system that
+    /// cannot be un-called — so a human decides before anything else moves. The saga's completed
+    /// steps stay completed and the unwind can still be started later.
+    /// </remarks>
+    Suspend = 2,
+
+    /// <summary>
+    /// Fail the instance immediately, skipping the unwind.
+    /// </summary>
+    /// <remarks>
+    /// For a step whose failure means the saga's earlier work should <em>stand</em> — undoing it
+    /// would be worse than leaving it. Terminal: unlike <see cref="Suspend"/>, nothing resumes from
+    /// here.
+    /// </remarks>
+    Terminate = 3,
 }
 
 /// <summary>
