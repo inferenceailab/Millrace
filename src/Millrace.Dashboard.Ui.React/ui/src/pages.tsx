@@ -1,0 +1,426 @@
+import { useState } from 'react'
+import { api } from './api'
+import { jobStates, type JobState } from './types'
+import {
+  ErrorNotice,
+  Loading,
+  Pager,
+  StateChip,
+  formatTime,
+  relativeToNow,
+  useAsync,
+  useCursorStack,
+} from './shared'
+
+/** Overview — every figure answers one question, so these are tiles, not a chart. */
+export function Overview() {
+  const { data, error, loading } = useAsync(() => api.statistics(), [])
+
+  if (loading) return <Loading />
+  if (error) return <ErrorNotice message={error} />
+  if (!data) return null
+
+  const queues = Object.entries(data.enqueuedByQueue).sort((a, b) => b[1] - a[1])
+
+  return (
+    <>
+      <section>
+        <h2>Jobs by state</h2>
+        <div className="tiles">
+          {jobStates.map((state) => {
+            const value = data.jobsByState[state] ?? 0
+            return (
+              <div className={`tile${value === 0 ? ' is-zero' : ''}`} key={state}>
+                <div className="label">
+                  <StateChip state={state} />
+                </div>
+                <div className="value">{value.toLocaleString()}</div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
+
+      <section>
+        <h2>Schedules</h2>
+        <div className="tiles">
+          <div className="tile">
+            <div className="label">Recurring</div>
+            <div className="value">{data.recurringDefinitions.toLocaleString()}</div>
+          </div>
+          <div className={`tile${data.overdueRecurringDefinitions === 0 ? ' is-zero' : ''}`}>
+            <div className="label">Overdue</div>
+            <div className={`value${data.overdueRecurringDefinitions > 0 ? ' overdue' : ''}`}>
+              {data.overdueRecurringDefinitions.toLocaleString()}
+            </div>
+          </div>
+        </div>
+        {data.overdueRecurringDefinitions > 0 && (
+          <div className="notice error">
+            <strong>{data.overdueRecurringDefinitions} schedule(s) are overdue.</strong> Either the
+            scheduler is behind, or no node is running the scheduler role.
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2>Queue depth</h2>
+        {queues.length === 0 ? (
+          <p className="muted">Nothing claimable.</p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Queue</th>
+                  <th className="num">Enqueued</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queues.map(([queue, depth]) => (
+                  <tr key={queue}>
+                    <td>{queue}</td>
+                    <td className="num">{depth.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </>
+  )
+}
+
+export function Jobs() {
+  const [state, setState] = useState<JobState | ''>('')
+  const [queue, setQueue] = useState('')
+  const filterKey = `${state}|${queue}`
+  const page = useCursorStack(filterKey)
+
+  const { data, error, loading } = useAsync(
+    () =>
+      api.jobs({
+        state: state ? [state] : undefined,
+        queue: queue || undefined,
+        cursor: page.cursor,
+        limit: 25,
+      }),
+    [state, queue, page.cursor],
+  )
+
+  return (
+    <>
+      <div className="controls">
+        <div className="field">
+          <label htmlFor="job-state">State</label>
+          <select
+            id="job-state"
+            value={state}
+            onChange={(e) => setState(e.target.value as JobState | '')}
+          >
+            <option value="">Any</option>
+            {jobStates.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="job-queue">Queue</label>
+          <input
+            id="job-queue"
+            type="text"
+            placeholder="Any"
+            value={queue}
+            onChange={(e) => setQueue(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {loading && <Loading />}
+      {error && <ErrorNotice message={error} />}
+      {data && (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>Job</th>
+                  <th>Queue</th>
+                  <th>Created</th>
+                  <th className="num">Attempts</th>
+                  <th className="num">Failures</th>
+                  <th className="num">Interrupted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((job) => (
+                  <tr key={job.id}>
+                    <td>
+                      <StateChip state={job.state} />
+                    </td>
+                    <td>
+                      <a href={`#/jobs/${job.id}`}>{job.methodName}</a>
+                      <div className="muted mono">{job.typeName}</div>
+                    </td>
+                    <td>{job.queue}</td>
+                    <td>{formatTime(job.createdAt)}</td>
+                    <td className="num">{job.attempt}</td>
+                    <td className="num">{job.failures}</td>
+                    <td className="num">{job.interruptions}</td>
+                  </tr>
+                ))}
+                {data.items.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="muted">
+                      No jobs match.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pager
+            nextCursor={data.nextCursor}
+            canGoBack={page.canGoBack}
+            onNext={() => data.nextCursor && page.next(data.nextCursor)}
+            onBack={page.back}
+            count={data.items.length}
+          />
+        </>
+      )}
+    </>
+  )
+}
+
+export function JobDetail({ id }: { id: string }) {
+  const { data, error, loading } = useAsync(() => api.job(id), [id])
+
+  if (loading) return <Loading />
+  if (error) return <ErrorNotice message={error} />
+  if (!data) return null
+
+  const s = data.summary
+  return (
+    <>
+      <p>
+        <a href="#/jobs">← All jobs</a>
+      </p>
+      <h2>
+        {s.methodName} <StateChip state={s.state} />
+      </h2>
+      <dl className="detail-grid">
+        <dt>Id</dt>
+        <dd className="mono">{s.id}</dd>
+        <dt>Type</dt>
+        <dd className="mono">{s.typeName}</dd>
+        <dt>Queue</dt>
+        <dd>
+          {s.queue} · priority {s.priority}
+        </dd>
+        <dt>Created</dt>
+        <dd>{formatTime(s.createdAt)}</dd>
+        <dt>Due</dt>
+        <dd>{formatTime(s.dueAt)}</dd>
+        <dt>Finished</dt>
+        <dd>{formatTime(s.finishedAt)}</dd>
+        <dt>Attempts</dt>
+        <dd>
+          {s.attempt} started · {s.failures} failed · {s.interruptions} interrupted
+          <div className="muted">
+            Interruptions are executions killed by infrastructure — crashes, deploys, lost leases —
+            rather than by failing code. Per-attempt history is not stored, so there is no timeline.
+          </div>
+        </dd>
+        <dt>Worker</dt>
+        <dd>{s.workerId ?? '—'}</dd>
+        <dt>Lease until</dt>
+        <dd>{formatTime(data.leaseUntil)}</dd>
+        <dt>Tenant</dt>
+        <dd>{s.tenantId ?? '—'}</dd>
+        <dt>Idempotency key</dt>
+        <dd className="mono">{data.idempotencyKey ?? '—'}</dd>
+        <dt>Cancel requested</dt>
+        <dd>{data.cancelRequested ? 'yes' : 'no'}</dd>
+        {data.parentId && (
+          <>
+            <dt>Continuation of</dt>
+            <dd>
+              <a href={`#/jobs/${data.parentId}`} className="mono">
+                {data.parentId}
+              </a>
+            </dd>
+          </>
+        )}
+      </dl>
+
+      <h2>Arguments</h2>
+      <pre>
+        {data.invocation.parameterTypes.length === 0
+          ? '(none)'
+          : data.invocation.parameterTypes
+              .map((type, i) => `${type}\n  ${data.invocation.argumentsJson[i] ?? 'null'}`)
+              .join('\n\n')}
+      </pre>
+
+      {data.lastError && (
+        <>
+          <h2>Last error</h2>
+          <pre>{data.lastError}</pre>
+        </>
+      )}
+    </>
+  )
+}
+
+export function Recurring() {
+  const page = useCursorStack('recurring')
+  const { data, error, loading } = useAsync(
+    () => api.recurring({ cursor: page.cursor, limit: 25 }),
+    [page.cursor],
+  )
+
+  if (loading) return <Loading />
+  if (error) return <ErrorNotice message={error} />
+  if (!data) return null
+
+  const now = Date.now()
+  return (
+    <>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Id</th>
+              <th>Cron (UTC)</th>
+              <th>Queue</th>
+              <th>Next fire</th>
+              <th>Last fired</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.map((definition) => {
+              const overdue = new Date(definition.nextFireTime).getTime() < now
+              return (
+                <tr key={definition.id}>
+                  <td>
+                    {definition.id}
+                    <div className="muted mono">{definition.methodName}</div>
+                  </td>
+                  <td className="mono">{definition.cron}</td>
+                  <td>{definition.queue}</td>
+                  <td className={overdue ? 'overdue' : undefined}>
+                    {formatTime(definition.nextFireTime)}
+                    <div className={overdue ? 'overdue' : 'muted'}>
+                      {overdue ? `overdue by ${relativeToNow(definition.nextFireTime).replace(' ago', '')}` : relativeToNow(definition.nextFireTime)}
+                    </div>
+                  </td>
+                  <td>{formatTime(definition.lastFireTime)}</td>
+                </tr>
+              )
+            })}
+            {data.items.length === 0 && (
+              <tr>
+                <td colSpan={5} className="muted">
+                  No recurring definitions.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <Pager
+        nextCursor={data.nextCursor}
+        canGoBack={page.canGoBack}
+        onNext={() => data.nextCursor && page.next(data.nextCursor)}
+        onBack={page.back}
+        count={data.items.length}
+      />
+      <p className="muted" style={{ marginTop: 12 }}>
+        Last fired records when a definition ran, not whether it succeeded — fired jobs carry no link
+        back to their definition, so the outcome cannot be shown here.
+      </p>
+    </>
+  )
+}
+
+export function Instances() {
+  const [definitionId, setDefinitionId] = useState('')
+  const page = useCursorStack(definitionId)
+  const { data, error, loading } = useAsync(
+    () => api.instances({ definitionId: definitionId || undefined, cursor: page.cursor, limit: 25 }),
+    [definitionId, page.cursor],
+  )
+
+  return (
+    <>
+      <div className="controls">
+        <div className="field">
+          <label htmlFor="definition">Definition</label>
+          <input
+            id="definition"
+            type="text"
+            placeholder="Any"
+            value={definitionId}
+            onChange={(e) => setDefinitionId(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {loading && <Loading />}
+      {error && <ErrorNotice message={error} />}
+      {data && (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>State</th>
+                  <th>Definition</th>
+                  <th className="num">Version</th>
+                  <th>Created</th>
+                  <th>Last checkpoint</th>
+                  <th className="num">Revision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((instance) => (
+                  <tr key={instance.id}>
+                    <td>
+                      <StateChip state={instance.state} />
+                    </td>
+                    <td>
+                      {instance.definitionId}
+                      <div className="muted mono">{instance.id}</div>
+                    </td>
+                    <td className="num">{instance.definitionVersion}</td>
+                    <td>{formatTime(instance.createdAt)}</td>
+                    <td>{formatTime(instance.updatedAt)}</td>
+                    <td className="num">{instance.revision}</td>
+                  </tr>
+                ))}
+                {data.items.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="muted">
+                      No workflow instances. The engine lands in 0.3.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pager
+            nextCursor={data.nextCursor}
+            canGoBack={page.canGoBack}
+            onNext={() => data.nextCursor && page.next(data.nextCursor)}
+            onBack={page.back}
+            count={data.items.length}
+          />
+        </>
+      )}
+    </>
+  )
+}

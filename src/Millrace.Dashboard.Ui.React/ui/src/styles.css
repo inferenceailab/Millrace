@@ -1,0 +1,342 @@
+/*
+ * Colours come from the reference palette: status roles for job states, ink roles for text.
+ * Status hues are never load-bearing on their own — every state chip carries its label, which is
+ * the documented mitigation for the two light-surface roles that sit below 3:1 contrast.
+ *
+ * Dark mode is selected, not an inversion: the same status steps, checked against the dark surface.
+ */
+:root {
+  color-scheme: light dark;
+
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+  --hairline: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.1);
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --accent: #2a78d6;
+
+  --radius: 8px;
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) {
+    --surface: #1a1a19;
+    --plane: #0d0d0d;
+    --ink: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --hairline: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --accent: #3987e5;
+  }
+}
+
+:root[data-theme='dark'] {
+  --surface: #1a1a19;
+  --plane: #0d0d0d;
+  --ink: #ffffff;
+  --ink-secondary: #c3c2b7;
+  --hairline: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #3987e5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+.layout {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+header.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+header.masthead h1 {
+  font-size: 20px;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+header.masthead .sub {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+nav.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 16px 0 24px;
+  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+
+nav.tabs a {
+  padding: 8px 12px;
+  color: var(--ink-secondary);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-weight: 500;
+}
+
+nav.tabs a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* Stat tiles — the overview's data has one job per figure, so it is a tile, not a chart. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.tile .label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tile .value {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 6px;
+}
+
+.tile.is-zero .value {
+  color: var(--ink-muted);
+}
+
+section h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 28px 0 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+
+th {
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  /* Tabular figures only where digits must align down a column. */
+  font-variant-numeric: tabular-nums;
+}
+
+td.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* State chips: a dot carries the status colour, the text carries the meaning. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.chip::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  flex: none;
+}
+
+.chip[data-state='Succeeded']::before,
+.chip[data-state='Completed']::before {
+  background: var(--good);
+}
+.chip[data-state='Failed']::before,
+.chip[data-state='Suspended']::before {
+  background: var(--warning);
+}
+.chip[data-state='Processing']::before,
+.chip[data-state='Running']::before {
+  background: var(--accent);
+}
+.chip[data-state='Dead']::before {
+  background: var(--critical);
+}
+.chip[data-state='Compensated']::before {
+  background: var(--serious);
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  font-weight: 500;
+}
+
+select,
+input[type='text'],
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+button:disabled {
+  color: var(--ink-muted);
+  cursor: not-allowed;
+}
+
+/* Cursor paging only: §11.12 ships no total, so there is no page number to render. */
+.pager {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.notice {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-secondary);
+}
+
+.notice.error {
+  border-left-color: var(--critical);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: 8px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.detail-grid dt {
+  color: var(--ink-secondary);
+  font-weight: 500;
+}
+
+.detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 0;
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.overdue {
+  color: var(--critical);
+  font-weight: 600;
+}

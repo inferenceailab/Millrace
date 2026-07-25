@@ -74,6 +74,13 @@ public static class MillraceDashboardEndpointRouteBuilderExtensions
             "Millrace dashboard mounted at {Prefix}/api/{Version}; OpenAPI document at {Prefix}/openapi/{Document}.json.",
             prefix, MillraceDashboard.ApiVersion, prefix, MillraceDashboard.DocumentName);
 
+        // A UI package is optional — the API is the product and is fully usable headless (§7).
+        if (services.GetService<IMillraceDashboardUi>() is { } ui)
+        {
+            MapUi(endpoints, prefix, ui, authorization);
+            logger.LogInformation("Millrace dashboard {Ui} UI mounted at {Prefix}/ui.", ui.Name, prefix);
+        }
+
         return api;
     }
 
@@ -129,6 +136,41 @@ public static class MillraceDashboardEndpointRouteBuilderExtensions
             + "services.AddMillraceDashboardAuthorization<T>(), or set "
             + "MillraceDashboardOptions.AllowAnonymousAccessInsecure if unauthenticated access is genuinely "
             + "intended (ARCHITECTURE.md §11.13).");
+    }
+
+    /// <summary>
+    /// Serves the registered UI bundle at <c>{prefix}/ui</c>, falling back to the entry document so
+    /// client-side routes and deep links resolve.
+    /// </summary>
+    private static void MapUi(
+        IEndpointRouteBuilder endpoints, string prefix, IMillraceDashboardUi ui,
+        IMillraceDashboardAuthorization? authorization)
+    {
+        var filter = new DashboardAuthorizationFilter(authorization);
+
+        endpoints.MapGet($"{prefix}/ui/{{**path}}", (string? path) =>
+            {
+                if (!string.IsNullOrEmpty(path) && ui.TryOpenAsset(path, out var asset, out var assetType))
+                {
+                    return Results.Stream(asset, assetType);
+                }
+
+                // No asset: either the mount root or a client-side route. Both get the entry
+                // document — a 404 here would break every deep link into the application.
+                var entry = ui.OpenEntryDocument(out var entryType);
+                return Results.Stream(entry, entryType);
+            })
+            .ExcludeFromDescription() // Static assets are not part of the REST contract.
+            .AddEndpointFilter(filter);
+
+        // The mount root without a trailing slash, so /millrace/ui works as well as /millrace/ui/.
+        endpoints.MapGet($"{prefix}/ui", () =>
+            {
+                var entry = ui.OpenEntryDocument(out var entryType);
+                return Results.Stream(entry, entryType);
+            })
+            .ExcludeFromDescription()
+            .AddEndpointFilter(filter);
     }
 
     private static void MapMetaEndpoints(IEndpointRouteBuilder api)
