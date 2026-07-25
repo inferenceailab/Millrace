@@ -143,6 +143,13 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
                 // reaches here to advance an instance.
                 CheckpointCore(transition.Checkpoint, undo);
 
+                foreach (var bookmark in transition.Bookmarks)
+                {
+                    _bookmarks.Add(bookmark);
+                    var inserted = bookmark;
+                    undo.Add(() => _bookmarks.Remove(inserted));
+                }
+
                 TransitionCore(entry, transition, undo, wakeups);
 
                 foreach (var record in transition.Enqueue)

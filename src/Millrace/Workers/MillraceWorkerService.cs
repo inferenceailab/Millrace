@@ -478,6 +478,7 @@ internal sealed class MillraceWorkerService(
         // Only a successful execution contributes effects: a failing activity must not advance its
         // workflow, and a cancelled one has nothing to say.
         Enqueue = effects is null ? [] : effects.Enqueue,
+        Bookmarks = effects is null ? [] : effects.Bookmarks,
         Checkpoint = effects?.Checkpoint,
     };
 

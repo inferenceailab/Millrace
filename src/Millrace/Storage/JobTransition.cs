@@ -67,6 +67,17 @@ public sealed record JobTransition
     /// </remarks>
     public WorkflowCheckpoint? Checkpoint { get; init; }
 
+    /// <summary>
+    /// Bookmarks inserted in the same transaction (workflow engine, 0.3).
+    /// </summary>
+    /// <remarks>
+    /// A wait must appear exactly when the cursor says the instance is waiting. Inserted separately
+    /// and it could exist without the cursor knowing (a duplicate wait on retry) or the cursor could
+    /// say "suspended" with no bookmark to wake it — an instance parked forever. Same reasoning as
+    /// <see cref="Checkpoint"/>, same solution.
+    /// </remarks>
+    public IReadOnlyList<BookmarkRecord> Bookmarks { get; init; } = [];
+
     /// <summary>Direct Awaiting children of <see cref="JobId"/> become <see cref="JobState.Enqueued"/>.</summary>
     public bool ActivateContinuations { get; init; }
 
