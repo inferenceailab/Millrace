@@ -91,6 +91,42 @@ public sealed class JobClient(
     public ValueTask RemoveRecurringAsync(string recurringId, CancellationToken ct = default)
         => storage.RemoveRecurringAsync(recurringId, ct);
 
+    public ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default)
+        => storage.TryCancelAsync(id, ct);
+
+    public async ValueTask<bool> TriggerRecurringAsync(string recurringId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(recurringId);
+
+        var definition = await storage.GetRecurringAsync(recurringId, ct).ConfigureAwait(false);
+        if (definition is null)
+        {
+            return false;
+        }
+
+        // A plain enqueue, deliberately not TryFireRecurringAsync: that operation exists to fence
+        // the *scheduled* occurrence across nodes, and borrowing it here would advance NextFireTime
+        // and silently skip the occurrence the operator was not asking to replace.
+        var now = time.GetUtcNow();
+        await storage.EnqueueAsync(
+            [
+                new JobRecord
+                {
+                    Id = JobId.New(time),
+                    Queue = definition.Queue,
+                    State = JobState.Enqueued,
+                    Priority = definition.Priority,
+                    Invocation = definition.Invocation,
+                    Retry = definition.Retry,
+                    TenantId = definition.TenantId,
+                    CreatedAt = now,
+                },
+            ],
+            ct).ConfigureAwait(false);
+
+        return true;
+    }
+
     private JobRecord Build(
         JobInvocation invocation, EnqueueOptions? options, JobState state,
         DateTimeOffset? dueAt, JobId? parentId) => new()

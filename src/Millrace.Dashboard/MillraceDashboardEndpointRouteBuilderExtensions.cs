@@ -69,6 +69,7 @@ public static class MillraceDashboardEndpointRouteBuilderExtensions
 
         MapMetaEndpoints(api);
         api.MapMonitoringEndpoints();
+        api.MapManagementEndpoints();
 
         logger.LogInformation(
             "Millrace dashboard mounted at {Prefix}/api/{Version}; OpenAPI document at {Prefix}/openapi/{Document}.json.",

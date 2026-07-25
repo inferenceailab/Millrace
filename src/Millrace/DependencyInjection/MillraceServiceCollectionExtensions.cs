@@ -49,6 +49,11 @@ public static class MillraceServiceCollectionExtensions
         // here, and the worker folds them into that job's own terminal transition.
         services.TryAddScoped<JobSideEffects>();
         services.TryAddSingleton<IJobClient, JobClient>();
+        // Registered even with no workflows: the dashboard's signal endpoint resolves the client
+        // regardless, and an application that registers none should get "nothing was waiting"
+        // rather than a missing-service failure. The registry is simply empty.
+        services.TryAddSingleton(sp => new Millrace.Workflows.WorkflowRegistry(sp.GetServices<Millrace.Workflows.WorkflowDefinition>()));
+        services.TryAddSingleton<Millrace.Workflows.IWorkflowClient, Millrace.Workflows.WorkflowClient>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MillraceWorkerService>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MillraceSchedulerService>());
 
