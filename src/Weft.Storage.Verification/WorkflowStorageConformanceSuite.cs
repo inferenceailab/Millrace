@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Time.Testing;
 using Weft.Storage;
 using Xunit;
@@ -16,6 +17,18 @@ public abstract partial class WorkflowStorageConformanceSuite
     protected abstract ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time);
 
     protected static FakeTimeProvider NewTime() => new(Epoch);
+
+    /// <summary>
+    /// Data/cursor documents are JSON, not opaque strings: providers may normalize lexical
+    /// formatting (jsonb whitespace/key order), so fidelity is asserted semantically.
+    /// </summary>
+    protected static void AssertJsonEqual(string expected, string? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.True(
+            JsonNode.DeepEquals(JsonNode.Parse(expected), JsonNode.Parse(actual)),
+            $"JSON documents differ semantically. Expected: {expected} Actual: {actual}");
+    }
 
     protected static WorkflowInstanceRecord Instance(TimeProvider time) => new()
     {
@@ -53,7 +66,7 @@ public abstract partial class WorkflowStorageConformanceSuite
         Assert.NotNull(stored);
         Assert.Equal(instance.Id, stored.Id);
         Assert.Equal(1, stored.Revision);
-        Assert.Equal(instance.DataJson, stored.DataJson);
+        AssertJsonEqual(instance.DataJson, stored.DataJson);
     }
 
     [Fact]
@@ -93,7 +106,7 @@ public abstract partial class WorkflowStorageConformanceSuite
 
         var stored = (await harness.Workflows.GetInstanceAsync(instance.Id, CancellationToken.None))!;
         Assert.Equal(2, stored.Revision);
-        Assert.Equal("""{"value":2}""", stored.DataJson);
+        AssertJsonEqual("""{"value":2}""", stored.DataJson);
     }
 
     [Fact]
@@ -112,7 +125,7 @@ public abstract partial class WorkflowStorageConformanceSuite
 
         var stored = (await harness.Workflows.GetInstanceAsync(instance.Id, CancellationToken.None))!;
         Assert.Equal(2, stored.Revision);
-        Assert.Equal("""{"value":2}""", stored.DataJson);
+        AssertJsonEqual("""{"value":2}""", stored.DataJson);
     }
 
     [Fact]

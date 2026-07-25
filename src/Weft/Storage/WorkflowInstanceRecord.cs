@@ -31,10 +31,17 @@ public sealed record WorkflowInstanceRecord
 
     public required WorkflowInstanceState State { get; init; }
 
-    /// <summary>The serialized <c>TData</c> document.</summary>
+    /// <summary>
+    /// The serialized <c>TData</c> document. This is a JSON <em>document</em>, not an opaque
+    /// string: providers may store it in a native JSON column (jsonb etc.) and must preserve
+    /// semantic content — lexical formatting (whitespace, object key order) need not survive.
+    /// </summary>
     public required string DataJson { get; init; }
 
-    /// <summary>Opaque engine cursor state (graph positions); null before the first checkpoint.</summary>
+    /// <summary>
+    /// Engine cursor state (graph positions); null before the first checkpoint. Same
+    /// JSON-document semantics as <see cref="DataJson"/>.
+    /// </summary>
     public string? CursorJson { get; init; }
 
     /// <summary>
