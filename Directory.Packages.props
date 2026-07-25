@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Lets a PackageVersion below pin a dependency we do not reference directly, which is how
+         the Microsoft.OpenApi advisory is dealt with without waiting on an upstream release. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup Label="Runtime">
@@ -10,6 +13,12 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!-- Transitive pin. Microsoft.AspNetCore.OpenApi 10.0.10 still depends on Microsoft.OpenApi
+         2.0.0, which carries CVE-2026-49451 (stack overflow parsing circular schema references,
+         GHSA-v5pm-xwqc-g5wc); 2.7.5 is the lowest fixed version. Remove this pin once ASP.NET Core
+         ships a patched dependency of its own. -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 
   <ItemGroup Label="Provider testing">
@@ -17,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Testing">
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.7.0" />

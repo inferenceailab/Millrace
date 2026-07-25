@@ -31,6 +31,7 @@ public static class MillraceBuilderPostgreSqlExtensions
             options)));
         return builder.UseStorage(
             sp => sp.GetRequiredService<PostgreSqlStorage>(),
+            sp => sp.GetRequiredService<PostgreSqlStorage>(),
             sp => sp.GetRequiredService<PostgreSqlStorage>());
     }
 }
