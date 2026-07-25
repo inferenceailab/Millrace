@@ -1,0 +1,81 @@
+# Publishes to NuGet from a tag, so a release is a commit anyone can point at rather than whatever
+# happened to be on somebody's laptop. The version comes from the tag alone (§11.31).
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Source Link records the commit, so the shallow default would leave the packages pointing
+          # at a commit the repository cannot resolve.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Needed to BUILD the UI packages, never to consume them. The smoke test below is what keeps
+      # that distinction honest.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Derive the version from the tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "$version" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' does not contain a version." && exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version"
+
+      - name: Pack
+        run: >
+          dotnet pack Millrace.slnx -c Release -o artifacts
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:VersionSuffix=
+
+      # The artifact is what consumers get, so it is what gets tested. A package that restores but
+      # cannot run, or a UI package whose embedded bundle did not survive packing, fails here rather
+      # than on nuget.org where it cannot be unpublished.
+      - name: Smoke test the packages
+        shell: pwsh
+        run: >
+          ./scripts/smoke-test-packages.ps1
+          -Packages "$PWD/artifacts"
+          -Version ${{ steps.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/*
+
+      - name: Push to NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::NUGET_API_KEY is not configured for this repository." && exit 1
+          fi
+          # --skip-duplicate so re-running a release that failed halfway is safe: the packages
+          # already pushed are accepted rather than failing the whole job.
+          dotnet nuget push "artifacts/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" artifacts/*.nupkg --generate-notes

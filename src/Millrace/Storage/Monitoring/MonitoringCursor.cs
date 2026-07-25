@@ -37,7 +37,8 @@ public static class MonitoringCursor
     }
 
     /// <summary>
-    /// Decodes a cursor produced by <see cref="Encode"/>. Returns <see langword="false"/> for
+    /// Decodes a cursor produced by <see cref="Encode(DateTimeOffset, Guid)"/>. Returns
+    /// <see langword="false"/> for
     /// anything else — malformed, truncated, or simply not a cursor.
     /// </summary>
     public static bool TryDecode(string? cursor, out DateTimeOffset createdAt, out Guid id)

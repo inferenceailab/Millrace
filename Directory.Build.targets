@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    The README is packed from the repository root rather than copied into each project, so the text
+    consumers read on nuget.org cannot drift from the one in the repository.
+
+    In .targets rather than .props because IsPackable is set by the individual projects, and .props
+    is imported before they are evaluated — the condition would always see an empty value there.
+  -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>
