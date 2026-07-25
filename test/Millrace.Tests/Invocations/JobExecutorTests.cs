@@ -92,6 +92,9 @@ public class JobExecutorTests
         services.AddTransient<IDerivedProbe, ExplicitProbe>();
         services.AddTransient<ITokenProbe, TokenProbe>();
         services.AddScoped<IScopedProbe, ScopedProbe>();
+        // The executor collects side effects from the execution scope, so a provider it runs
+        // against must supply the accumulator — AddMillrace registers it for real hosts.
+        services.AddScoped<JobSideEffects>();
         var provider = services.BuildServiceProvider();
 
         var executor = new JobExecutor(

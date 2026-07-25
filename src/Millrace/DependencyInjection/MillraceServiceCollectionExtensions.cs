@@ -45,6 +45,9 @@ public static class MillraceServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<ITenantContextAccessor, AmbientTenantContextAccessor>();
         services.TryAddSingleton<JobExecutor>();
+        // Scoped to one job execution: the workflow engine writes the checkpoint and follow-on jobs
+        // here, and the worker folds them into that job's own terminal transition.
+        services.TryAddScoped<JobSideEffects>();
         services.TryAddSingleton<IJobClient, JobClient>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MillraceWorkerService>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MillraceSchedulerService>());
