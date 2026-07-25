@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.DependencyInjection;
 using Millrace.Storage;
 
 namespace Millrace.Workflows;
@@ -8,7 +7,6 @@ namespace Millrace.Workflows;
 /// <inheritdoc cref="IWorkflowClient"/>
 internal sealed class WorkflowClient(
     IWorkflowStorage workflows,
-    IServiceProvider services,
     IJobStorage jobs,
     WorkflowRegistry registry,
     Tenancy.ITenantContextAccessor tenants,
@@ -121,15 +119,27 @@ internal sealed class WorkflowClient(
         await jobs.EnqueueAsync([first], ct).ConfigureAwait(false);
         return instance.Id;
     }
+
     /// <inheritdoc />
     public async ValueTask<bool> RecoverCompensationAsync(
         WorkflowInstanceId id, CompensationRecovery action, CancellationToken ct = default)
     {
-        // Resolved per call from a scope rather than injected: the dispatcher is scoped, because it
-        // activates the consumer''s activities, and a singleton client cannot hold one. This is the
-        // same shape the worker uses to run an activity.
-        await using var scope = services.CreateAsyncScope();
-        var dispatcher = scope.ServiceProvider.GetRequiredService<IWorkflowDispatcher>();
-        return await dispatcher.RecoverCompensationAsync(id.Value, action, ct).ConfigureAwait(false);
+        var instance = await workflows.GetInstanceAsync(id, ct).ConfigureAwait(false);
+        if (instance is not { State: WorkflowInstanceState.Suspended })
+        {
+            return false;
+        }
+
+        // Enqueued rather than applied here. The dispatcher commits nothing of its own — an
+        // instance change reaches storage only by riding a job's transition (§11.16) — so a direct
+        // call would compute the right checkpoint and discard it. Going through a job also means
+        // the decision inherits retries and dashboard visibility, exactly as an activity does.
+        await jobs.EnqueueAsync(
+            [WorkflowJobFactory.CreateRecovery(id, instance.TenantId, action, _options, time)],
+            ct).ConfigureAwait(false);
+
+        // Accepted, not done: the check above is advisory and the job re-checks when it runs, so a
+        // second operator clicking at the same moment finds nothing to do and the job is a no-op.
+        return true;
     }
 }

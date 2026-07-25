@@ -79,17 +79,8 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
     public Task CompensateAsync(Guid instanceId, string sagaId, string stepNodeId, CancellationToken ct)
         => RunAsync(instanceId, walker => walker.CompensateAsync(sagaId, stepNodeId, ct), ct);
 
-    public async Task<bool> RecoverCompensationAsync(
-        Guid instanceId, CompensationRecovery action, CancellationToken ct)
-    {
-        var recovered = false;
-        await RunAsync(
-            instanceId,
-            async walker => recovered = await walker.RecoverAsync(action, ct).ConfigureAwait(false),
-            ct).ConfigureAwait(false);
-
-        return recovered;
-    }
+    public Task RecoverCompensationAsync(Guid instanceId, CompensationRecovery action, CancellationToken ct)
+        => RunAsync(instanceId, walker => walker.RecoverAsync(action, ct), ct);
 
     private async Task RunAsync(Guid instanceId, Func<Walker, Task> run, CancellationToken ct)
     {
@@ -125,7 +116,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
 
         public abstract Task CompensateAsync(string sagaId, string stepNodeId, CancellationToken ct);
 
-        public abstract Task<bool> RecoverAsync(CompensationRecovery action, CancellationToken ct);
+        public abstract Task RecoverAsync(CompensationRecovery action, CancellationToken ct);
     }
 
     private sealed class Walker<TData> : Walker
@@ -316,7 +307,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
         /// the engine uses, so an operator clicking twice, or two operators clicking at once, loses
         /// the race exactly as a duplicate job delivery would.
         /// </remarks>
-        public override Task<bool> RecoverAsync(CompensationRecovery action, CancellationToken ct)
+        public override Task RecoverAsync(CompensationRecovery action, CancellationToken ct)
         {
             var sagas = new Dictionary<string, SagaState>(_cursor.Sagas, StringComparer.Ordinal);
 
@@ -326,7 +317,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             if (_instance.State != WorkflowInstanceState.Suspended
                 || sagas.FirstOrDefault(s => s.Value.Compensating) is not { Value.Completed.Count: > 0 } entry)
             {
-                return Task.FromResult(false);
+                return Task.CompletedTask;
             }
 
             var (sagaId, saga) = (entry.Key, entry.Value);
@@ -340,7 +331,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                     // mistakes this for an unwind still in progress.
                     sagas.Remove(sagaId);
                     Checkpoint(WorkflowInstanceState.Failed, joins, waits, sagas, scheduled: [], bookmarks: []);
-                    return Task.FromResult(true);
+                    return Task.CompletedTask;
 
                 case CompensationRecovery.Skip:
                 {
@@ -353,7 +344,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                         Checkpoint(
                             WorkflowInstanceState.Compensated, joins, waits, sagas,
                             scheduled: [], bookmarks: []);
-                        return Task.FromResult(true);
+                        return Task.CompletedTask;
                     }
 
                     sagas[sagaId] = saga with { Completed = remaining };
@@ -362,7 +353,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                         scheduled: [WorkflowJobFactory.CreateCompensation(
                             _instance, sagaId, remaining[^1], _owner._options, _owner._time)],
                         bookmarks: []);
-                    return Task.FromResult(true);
+                    return Task.CompletedTask;
                 }
 
                 default:
@@ -374,7 +365,7 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                         scheduled: [WorkflowJobFactory.CreateCompensation(
                             _instance, sagaId, saga.Completed[^1], _owner._options, _owner._time)],
                         bookmarks: []);
-                    return Task.FromResult(true);
+                    return Task.CompletedTask;
             }
         }
 

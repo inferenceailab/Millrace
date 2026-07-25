@@ -70,14 +70,15 @@ public interface IWorkflowDispatcher
     Task CompensateAsync(Guid instanceId, string sagaId, string stepNodeId, CancellationToken ct);
 
     /// <summary>
-    /// Moves a suspended unwind forward on an operator's instruction (§11.30).
+    /// Applies an operator''s recovery decision to a suspended unwind (§11.30).
     /// </summary>
-    /// <returns>
-    /// False when there is nothing to recover — the instance is not suspended mid-unwind — which is
-    /// an ordinary answer for a stale dashboard button, not a fault.
-    /// </returns>
-    Task<bool> RecoverCompensationAsync(
-        Guid instanceId, CompensationRecovery action, CancellationToken ct);
+    /// <remarks>
+    /// Enqueued by <c>IWorkflowClient.RecoverCompensationAsync</c> rather than called directly, so
+    /// the resulting checkpoint commits with this job''s own transition — the dispatcher writes
+    /// nothing itself. Does nothing if the instance is no longer suspended mid-unwind, which makes
+    /// a duplicate delivery harmless.
+    /// </remarks>
+    Task RecoverCompensationAsync(Guid instanceId, CompensationRecovery action, CancellationToken ct);
 }
 
 /// <summary>
