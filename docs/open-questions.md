@@ -8,8 +8,25 @@ Anything already decided is *not* here — see §11. Don't re-litigate those.
 
 ## Currently blocking
 
-**Nothing.** The four questions that gated the 0.2 dashboard slice were settled on 2026-07-25 and
-now live in `ARCHITECTURE.md` §11.11–§11.14:
+### Workflow checkpoints cannot be atomic with the job transition — [#64](https://github.com/inferenceailab/Millrace/issues/64)
+
+**Blocks the rest of 0.3** (#36, #37, #38). §6.2 requires the instance checkpoint, the next-activity
+enqueue and the activity job's transition to commit as one atom — "the checkpoint is the unit of
+exactly-once progress". `JobTransition` can carry the enqueue but not the checkpoint, and
+`UpdateInstanceAsync` is a separate call on a separate interface, so the coupling is inexpressible.
+
+Either ordering of two calls loses: checkpoint-then-transition re-runs an activity from a cursor
+that already moved past it; transition-then-checkpoint stalls the instance forever with no failure
+recorded. Recommended fix is an optional checkpoint on `JobTransition`, the direct analogue of the
+existing `Enqueue`.
+
+The definition builder (#35) is unaffected and is done — it produces the graph shape and touches no
+storage.
+
+## Settled
+
+The four questions that gated the 0.2 dashboard slice were settled on 2026-07-25 and now live in
+`ARCHITECTURE.md` §11.11–§11.14:
 
 | Was | Settled as | Decision |
 |---|---|---|
