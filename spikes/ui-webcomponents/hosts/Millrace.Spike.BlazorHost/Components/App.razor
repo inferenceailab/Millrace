@@ -1,0 +1,28 @@
+@using Microsoft.AspNetCore.Components.Routing
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Millrace — Blazor host spike</title>
+    @* The design tokens. These DO cross the shadow boundary, which is the half of the styling
+       story that works. *@
+    <link rel="stylesheet" href="millrace.css" />
+    <base href="/" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+
+    @* GLUE 1 of 2: the custom event must be registered AFTER blazor.web.js defines the global and
+       BEFORE Blazor.start(), which is why autostart is off and the order below is not negotiable.
+       Getting it wrong throws "Blazor is not defined" — or worse, registers too late and
+       @onjobselect silently never fires. See wwwroot/millrace-interop.js. *@
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script src="millrace-interop.js"></script>
+    <script>
+        Blazor.start().then(() => import('./millrace-jobs.js'));
+    </script>
+</body>
+</html>

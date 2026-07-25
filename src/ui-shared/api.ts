@@ -25,7 +25,23 @@ import type {
  * baked in at build time. The bundle always lives at `{prefix}/ui`, and the API at `{prefix}/api/v1`,
  * so the prefix is recoverable from our own path.
  */
+let explicitBase: string | null = null
+
+/**
+ * Overrides the derived base.
+ *
+ * Needed when the client is *not* running from the dashboard's own mount — a UI embedded in someone
+ * else's application cannot infer the prefix from its own URL, because its URL is theirs. Found by
+ * the web-component spike (#86), where the element hosted at `/` derived `/api/v1` and 404'd every
+ * request.
+ */
+export function setApiBase(base: string): void {
+  explicitBase = base.replace(/\/$/, '')
+}
+
 export function apiBase(): string {
+  if (explicitBase !== null) return explicitBase
+
   const path = window.location.pathname
   const marker = path.indexOf('/ui')
   const prefix = marker >= 0 ? path.slice(0, marker) : ''

@@ -23,48 +23,6 @@ existing `Enqueue`.
 The definition builder (#35) is unaffected and is done — it produces the graph shape and touches no
 storage.
 
-### Should the three UIs share one rendered implementation? — [#86](https://github.com/inferenceailab/Millrace/issues/86)
-
-**Blocks the Blazor UI (1.0); does not block React or Angular, which now share a non-visual core.**
-
-§11.4 chose "designed once in the contract, rendered three times". The alternative is to render
-*once* — a web-component implementation (Stencil or Lit) that React, Angular and Blazor all host —
-which would supersede §11.4 rather than implement it. Elsa v3 is the reference: its `elsa-studio`
-designer is Stencil-compiled custom elements, and it **also** ships a separate Blazor-native Elsa
-Studio, which is the empirical tell that the single-module approach breaks at Blazor.
-
-What is already settled and not part of this question: the API client, contract types and
-formatting live in `src/ui-shared/` and the stylesheet is shared, so the ~60% of a UI that is not
-rendering is written once (§11.21). This question is only about the remaining rendering layer.
-
-The three candidate shapes, and what each costs:
-
-| | One implementation | An Angular shop can extend it | Blazor shares it | Cost to adopt |
-|---|---|---|---|---|
-| Web components | yes | **no** — still an island, just a standards-based one | hosts it, cannot extend in C# | stylesheet must be re-cut for shadow DOM |
-| Shared core + thin renderers (**current**) | no | yes | no — shares the C# DTOs instead | already done for React/Angular |
-| Status quo (per-UI everything) | no | yes | no | — |
-
-Two things to weigh that are easy to get wrong:
-
-- **The stylesheet does not survive shadow DOM as-is.** `millrace.css` is 28 custom properties and
-  37 class selectors. The properties inherit through a shadow boundary; the class selectors do not.
-  So "the tokens already work" is true and insufficient — the component styles would have to be
-  re-cut per component or exposed via `::part`, which is a rewrite of the visual layer, not a port.
-- **#46's motivation argues against web components.** It asks for an Angular dashboard "without a
-  React island". A custom element is still an island: an Angular team cannot fork a page, add a
-  column, or restyle it in their own idiom. Web components solve "one thing to maintain"; they do
-  not solve "no island", which is what was asked for.
-
-**Blazor is the deciding case, and it is asymmetric.** React and Angular can share a TypeScript
-core because both consume ES modules. Blazor cannot — but it does not need to, because it already
-has a *better* shared core available: the real C# contract types in `Millrace.Dashboard`, which the
-TypeScript ones are a hand-written mirror of. A Blazor UI referencing those shares more of the
-contract than a TypeScript core could ever give it. So "one common module for all three" is only
-reachable via web components, and only by making the Blazor UI not really Blazor.
-
-Answer before starting the Blazor UI. Answering it later means rewriting two implementations.
-
 ## Settled
 
 The four questions that gated the 0.2 dashboard slice were settled on 2026-07-25 and now live in
@@ -76,6 +34,7 @@ The four questions that gated the 0.2 dashboard slice were settled on 2026-07-25
 | Pagination and filter DTOs | Cursor with an opaque token, no total count; `JobQuery`/`Page<T>` frozen in §4.1 | §11.12 |
 | Default authorization posture | Startup error outside Development | §11.13 |
 | Where `IMonitoringStorage` lives | Separate interface, required of a supported provider | §11.14 |
+| Whether the three UIs share one rendered implementation | No — shared non-visual core, per-framework rendering, native Blazor | §11.23 |
 
 Two consequences are worth knowing before writing UI code, because they are easy to violate by
 habit:
