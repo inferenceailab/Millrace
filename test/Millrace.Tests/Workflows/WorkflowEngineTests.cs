@@ -296,7 +296,16 @@ public sealed class WorkflowEngineTests
         var monitoring = host.Services.GetRequiredService<IMonitoringStorage>();
         await Eventually.ObservedAsync(
             async () => await monitoring.QueryJobsAsync(new JobQuery(), CancellationToken.None),
-            page => page.Items.Any(j => j.Failures > 0),
+            page =>
+            {
+                // The clock must move while waiting. The worker's poll loop delays through the
+                // injected TimeProvider, so on a fake clock that nothing advances it sleeps forever
+                // once its first poll comes up empty — and the job being waited for never runs.
+                // This passed locally on timing luck: the enqueue landed inside the worker's first
+                // burst of polls. A slower machine loses that race, which is what CI does.
+                time.Advance(TimeSpan.FromMilliseconds(200));
+                return page.Items.Any(j => j.Failures > 0);
+            },
             "the failing activity to run and record a failure");
 
         var instance = await storage.GetInstanceAsync(id, CancellationToken.None);
