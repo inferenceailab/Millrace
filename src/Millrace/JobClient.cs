@@ -94,6 +94,45 @@ public sealed class JobClient(
     public ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default)
         => storage.TryCancelAsync(id, ct);
 
+    public ValueTask<IReadOnlyList<JobId>> EnqueueBatchAsync(JobBatch batch, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+
+        if (batch.Count == 0)
+        {
+            // An empty batch is not an error — a fan-out over an empty collection is ordinary — and
+            // a round trip to insert nothing would be waste.
+            return new ValueTask<IReadOnlyList<JobId>>([]);
+        }
+
+        var factory = new JobFactory(
+            (invocation, options, state, dueAt) => Build(invocation, options, state, dueAt, parentId: null),
+            _options.SerializerOptions,
+            time.GetUtcNow());
+
+        var records = batch.Build(factory);
+
+        // The storage contract leaves this to the caller and lets providers reject it or not, so
+        // left alone the behaviour would differ by database: one deduplicates, another violates a
+        // unique index. Checking here makes a likely mistake — building a batch in a loop and
+        // reusing a key — fail the same way everywhere, before anything is written.
+        var duplicate = records
+            .Where(r => r.IdempotencyKey is not null)
+            .GroupBy(r => (r.TenantId, r.IdempotencyKey), StringTupleComparer.Instance)
+            .FirstOrDefault(g => g.Count() > 1);
+
+        if (duplicate is not null)
+        {
+            throw new ArgumentException(
+                $"Two jobs in the batch share idempotency key '{duplicate.Key.IdempotencyKey}'. Keys are "
+                + "unique among active jobs, so a batch cannot hold the same key twice — the second would "
+                + "silently resolve to the first.",
+                nameof(batch));
+        }
+
+        return storage.EnqueueAsync(records, ct);
+    }
+
     public async ValueTask<JobId?> RequeueAsync(JobId id, CancellationToken ct = default)
     {
         var original = await storage.GetJobAsync(id, ct).ConfigureAwait(false);
