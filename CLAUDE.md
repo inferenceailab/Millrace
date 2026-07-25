@@ -11,6 +11,10 @@
 - Core rule: `Millrace` (the core package) depends only on the BCL and `Microsoft.Extensions.*`. No database clients, no application frameworks (no ABP, MassTransit, MediatR).
 - `net10.0` only, nullable enabled, warnings are errors, package versions live centrally in `Directory.Packages.props`.
 - Build with `dotnet build`, test with `dotnet test`.
+- Building needs **Node 20+** as well as the .NET SDK: `Millrace.Dashboard.Ui.React` compiles its
+  embedded bundle during the .NET build. `-p:SkipUiBuild=true` skips it. Consumers of the published
+  packages never need Node — keep it that way.
+- The UI bundle is generated, never committed. Change `ui/src`, not `ui/dist`.
 
 ## Planning
 

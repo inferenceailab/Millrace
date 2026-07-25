@@ -19,7 +19,7 @@ directed, sustained flow that does work.
 | Phase | Scope | State |
 |---|---|---|
 | 0.1 | Storage contract, InMemory provider, job substrate, conformance kit | **done** |
-| 0.2 | PostgreSQL provider · dashboard REST API + OpenAPI · React UI (read-only) | provider **done**; dashboard not started |
+| 0.2 | PostgreSQL provider · dashboard REST API + OpenAPI · React UI (read-only) | **done** |
 | 0.3 | Workflow engine core | not started |
 | 0.4 | Sagas, compensation, versioning, management actions | not started |
 | 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | not started |
@@ -45,7 +45,13 @@ dotnet build
 dotnet test
 ```
 
-Requires the .NET 10 SDK. The PostgreSQL conformance run needs Docker (Testcontainers).
+Requires the .NET 10 SDK, and **Node 20+** — `Millrace.Dashboard.Ui.React` compiles its embedded
+bundle during the .NET build. Consumers of the published package never need Node; that is the point
+of shipping the bundle prebuilt. To build the C# alone, pass `-p:SkipUiBuild=true` (the resulting
+package serves no UI).
+
+The PostgreSQL conformance run needs Docker (Testcontainers). It is strict in CI: an unreachable
+database fails the run rather than skipping it.
 
 ## License
 

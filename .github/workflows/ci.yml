@@ -28,6 +28,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      # Millrace.Dashboard.Ui.React compiles its embedded bundle during the .NET build. Consumers
+      # of the published package never need Node — building this repository does.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
       - name: Restore
         run: dotnet restore
       - name: Build
