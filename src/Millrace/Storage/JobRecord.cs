@@ -75,6 +75,17 @@ public sealed record JobRecord
     /// </remarks>
     public JobId? RequeuedFrom { get; init; }
 
+    /// <summary>
+    /// W3C <c>traceparent</c> captured where the job was enqueued, so its execution continues that
+    /// trace rather than starting a new one (§8).
+    /// </summary>
+    /// <remarks>
+    /// Stored on the record because the enqueue and the execution are separated by a queue, a
+    /// process and often a machine — there is no ambient context to inherit at the far end. Null
+    /// when nothing was tracing at enqueue time.
+    /// </remarks>
+    public string? TraceParent { get; init; }
+
     public string? LastError { get; init; }
 
     public DateTimeOffset? FinishedAt { get; init; }

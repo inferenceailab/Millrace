@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Millrace.Invocations;
+using Millrace.Diagnostics;
 using Millrace.Storage;
 
 namespace Millrace.Workers;
@@ -169,9 +171,21 @@ internal sealed class MillraceWorkerService(
                 return;
             }
 
+            // Measured once, on the first attempt: a retry's wait is retry backoff, not queue
+            // pressure, and mixing the two makes both unreadable.
+            if (job.Attempt <= 1)
+            {
+                MillraceDiagnostics.QueueLatency.Record(
+                    Math.Max(0, (time.GetUtcNow() - job.CreatedAt).TotalSeconds),
+                    new KeyValuePair<string, object?>("millrace.queue", job.Queue));
+            }
+
+            var started = time.GetTimestamp();
+
             try
             {
                 var effects = await executor.ExecuteAsync(job, inFlight.Cts.Token).ConfigureAwait(false);
+                RecordCompletion(job, started, "succeeded");
                 await ApplyWithRemergeAsync(job, effects).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (inFlight.Cts.IsCancellationRequested)
@@ -188,6 +202,7 @@ internal sealed class MillraceWorkerService(
             }
             catch (Exception e)
             {
+                RecordCompletion(job, started, "failed");
                 var failures = job.Failures + 1;
                 var error = Truncate(e.ToString());
                 if (job.Retry.NextDelay(failures) is { } delay)
@@ -518,6 +533,19 @@ internal sealed class MillraceWorkerService(
         }
 
         return effects;
+    }
+
+    /// <summary>Records duration and outcome for one finished execution.</summary>
+    private void RecordCompletion(JobRecord job, long startedAt, string outcome)
+    {
+        var tags = new TagList
+        {
+            { "millrace.queue", job.Queue },
+            { "millrace.outcome", outcome },
+        };
+
+        MillraceDiagnostics.JobDuration.Record(time.GetElapsedTime(startedAt).TotalSeconds, tags);
+        MillraceDiagnostics.JobsCompleted.Add(1, tags);
     }
 
     private JobTransition Release(JobRecord job) => new()

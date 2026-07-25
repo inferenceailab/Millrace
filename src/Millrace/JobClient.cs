@@ -182,5 +182,8 @@ public sealed class JobClient(
         IdempotencyKey = options?.IdempotencyKey,
         TenantId = tenants.TenantId,
         ParentId = parentId,
+        // Captured here because this is the only place the enqueuing trace is still ambient: by the
+        // time a worker picks the job up it is a different process with no context to inherit.
+        TraceParent = System.Diagnostics.Activity.Current?.Id,
     };
 }

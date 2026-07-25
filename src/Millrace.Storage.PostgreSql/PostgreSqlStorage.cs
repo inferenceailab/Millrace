@@ -22,7 +22,8 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
     private const string JobColumns =
         "id, queue, state, priority, invocation, retry, created_at, due_at, worker_id, " +
         "lease_until, attempt, failures, cancel_requested, idempotency_key, tenant_id, " +
-        "parent_id, last_error, finished_at, workflow_instance_id, activity_node_id, requeued_from";
+        "parent_id, last_error, finished_at, workflow_instance_id, activity_node_id, requeued_from, " +
+        "trace_parent";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.General);
 
@@ -75,7 +76,8 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 finished_at timestamptz,
                 workflow_instance_id uuid,
                 activity_node_id text,
-                requeued_from uuid);
+                requeued_from uuid,
+                trace_parent text);
             CREATE UNIQUE INDEX IF NOT EXISTS ux_jobs_active_key
                 ON {_schema}.jobs (tenant_id, idempotency_key) NULLS NOT DISTINCT
                 WHERE idempotency_key IS NOT NULL AND state IN ({ActiveStates});
@@ -830,7 +832,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                     INSERT INTO {_schema}.jobs ({JobColumns})
                     VALUES (@id, @queue, @state, @priority, @invocation, @retry, @created, @due,
                             @worker, @lease, @attempt, @failures, @cancel, @key, @tenant,
-                            @parent, @error, @finished, @wf, @activity, @requeued)
+                            @parent, @error, @finished, @wf, @activity, @requeued, @trace)
                     {conflict}
                     RETURNING id
                     """;
@@ -855,6 +857,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
                 cmd.Parameters.AddWithValue("wf", Db(effective.WorkflowInstanceId?.Value));
                 cmd.Parameters.AddWithValue("activity", Db(effective.ActivityNodeId));
         cmd.Parameters.AddWithValue("requeued", Db(effective.RequeuedFrom?.Value));
+        cmd.Parameters.AddWithValue("trace", Db(effective.TraceParent));
 
                 if (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is Guid inserted)
                 {
@@ -974,6 +977,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         WorkflowInstanceId = reader.IsDBNull(18) ? null : new WorkflowInstanceId(reader.GetGuid(18)),
         ActivityNodeId = reader.IsDBNull(19) ? null : reader.GetString(19),
         RequeuedFrom = reader.IsDBNull(20) ? null : new JobId(reader.GetGuid(20)),
+        TraceParent = reader.IsDBNull(21) ? null : reader.GetString(21),
     };
 
     private static RecurringJobRecord ReadRecurring(NpgsqlDataReader reader) => new()
