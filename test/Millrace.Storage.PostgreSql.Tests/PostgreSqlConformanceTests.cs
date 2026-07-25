@@ -9,14 +9,55 @@ namespace Millrace.Storage.PostgreSql.Tests;
 
 /// <summary>
 /// One PostgreSQL for the whole test run: <c>MILLRACE_POSTGRES_CONNECTION</c> if set (CI-provided
-/// database), otherwise a Testcontainers postgres:17. When neither is available every
-/// conformance fact skips with an explanation instead of failing.
+/// database), otherwise a Testcontainers postgres:17.
 /// </summary>
+/// <remarks>
+/// When no database can be reached the suite either skips or fails, depending on whether this run
+/// was <em>expected</em> to have one — see <see cref="IsRequired"/>. Skipping is right on a
+/// developer machine without Docker; in CI it would mean reporting success for a run that proved
+/// nothing.
+/// </remarks>
 internal static class PostgresTestDatabase
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static string? _connectionString;
     private static bool _unavailable;
+    private static Exception? _lastFailure;
+
+    /// <summary>
+    /// Whether an unreachable database must fail the run rather than skip it.
+    /// </summary>
+    /// <remarks>
+    /// An explicit <c>MILLRACE_REQUIRE_POSTGRES</c> wins. Otherwise this defaults to whether
+    /// <c>CI</c> is set, so <em>every</em> CI job is strict unless it opts out deliberately. The
+    /// inverse default — opt in per job — would leave the next job someone adds free to skip the
+    /// whole suite and still report success.
+    /// </remarks>
+    public static bool IsRequired { get; } = ResolveRequired(
+        Environment.GetEnvironmentVariable("MILLRACE_REQUIRE_POSTGRES"),
+        Environment.GetEnvironmentVariable("CI"));
+
+    /// <summary>The reason the last container start failed, for diagnostics.</summary>
+    public static Exception? LastFailure => _lastFailure;
+
+    /// <summary>
+    /// The strictness policy, kept pure so it can be tested without a Docker daemon.
+    /// </summary>
+    /// <param name="explicitFlag">Value of <c>MILLRACE_REQUIRE_POSTGRES</c>, if any.</param>
+    /// <param name="ciFlag">Value of <c>CI</c>, if any.</param>
+    internal static bool ResolveRequired(string? explicitFlag, string? ciFlag)
+        => string.IsNullOrWhiteSpace(explicitFlag) ? IsTruthy(ciFlag) : IsTruthy(explicitFlag);
+
+    private static bool IsTruthy(string? value)
+    {
+        if (value is null)
+        {
+            return false;
+        }
+
+        var trimmed = value.Trim();
+        return trimmed is "1" or "yes" || (bool.TryParse(trimmed, out var parsed) && parsed);
+    }
 
     public static async Task<string?> GetConnectionStringAsync()
     {
@@ -50,12 +91,14 @@ internal static class PostgresTestDatabase
                     _connectionString = container.GetConnectionString();
                     return _connectionString;
                 }
-                catch when (attempt == 0)
+                catch (Exception ex) when (attempt == 0)
                 {
+                    _lastFailure = ex;
                     await Task.Delay(TimeSpan.FromSeconds(10));
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _lastFailure = ex;
                     _unavailable = true;
                     return null;
                 }
@@ -102,7 +145,22 @@ internal sealed class PostgreSqlHarness : IStorageHarness
         var connectionString = await PostgresTestDatabase.GetConnectionStringAsync();
         if (connectionString is null)
         {
-            Assert.Skip("PostgreSQL unavailable — start Docker or set MILLRACE_POSTGRES_CONNECTION.");
+            // Skipping here would report success for a run that verified nothing, so a run that was
+            // expected to have a database fails loudly instead.
+            if (PostgresTestDatabase.IsRequired)
+            {
+                throw new InvalidOperationException(
+                    "PostgreSQL was required for this run but no database could be reached. "
+                    + "Testcontainers could not start postgres:17-alpine and MILLRACE_POSTGRES_CONNECTION was not set. "
+                    + "If this runner genuinely cannot provide one (for example a Windows runner, which cannot run "
+                    + "Linux containers), set MILLRACE_REQUIRE_POSTGRES=false on that job so the skip is deliberate.",
+                    PostgresTestDatabase.LastFailure);
+            }
+
+            Assert.Skip(
+                "PostgreSQL unavailable — start Docker or set MILLRACE_POSTGRES_CONNECTION. "
+                + "Set MILLRACE_REQUIRE_POSTGRES=true to make this a failure instead. "
+                + $"Last container-start failure: {PostgresTestDatabase.LastFailure?.Message ?? "none recorded"}");
         }
 
         // A fresh schema per harness gives the required isolated, empty store cheaply.
