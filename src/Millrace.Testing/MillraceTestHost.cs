@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Millrace.Invocations;
 using Millrace.Storage;
 using Millrace.Storage.InMemory;
+using Millrace.Workers;
 using Millrace.Workflows;
 
 namespace Millrace.Testing;
@@ -39,6 +40,8 @@ public sealed class MillraceTestHost : IAsyncDisposable
     private readonly InMemoryStorage _storage;
     private readonly JobExecutor _executor;
     private readonly MillraceOptions _options;
+
+    private const string WorkerId = "millrace-test-host";
 
     private MillraceTestHost(ServiceProvider provider, FakeTimeProvider time)
     {
@@ -131,7 +134,7 @@ public sealed class MillraceTestHost : IAsyncDisposable
 
             var claimed = await _storage.ClaimAsync(
                 new ClaimRequest(
-                    "millrace-test-host",
+                    WorkerId,
                     [.. _options.Queues, _options.WorkflowQueue],
                     MaxCount: 16,
                     _options.LeaseDuration),
@@ -156,49 +159,36 @@ public sealed class MillraceTestHost : IAsyncDisposable
 
     private async ValueTask RunOneAsync(JobRecord job, bool throwOnFailure, CancellationToken ct)
     {
+        // Every transition below comes from JobOutcomes, which is the same code the real worker
+        // runs. The harness used to decide these itself, and nothing checked the two agreed — so a
+        // consumer's test could pass on rules that had quietly stopped matching production.
+        if (JobOutcomes.IsPoisoned(job, _options.InterruptionLimit))
+        {
+            await _storage.ApplyAsync(
+                JobOutcomes.Poisoned(job, WorkerId, Time.GetUtcNow(), FailureEffects(job)), ct)
+                .ConfigureAwait(false);
+
+            if (throwOnFailure)
+            {
+                throw new MillraceJobFailedException(job, new InvalidOperationException(JobOutcomes.PoisonReason(job)));
+            }
+
+            return;
+        }
+
         try
         {
             var effects = await _executor.ExecuteAsync(job, ct).ConfigureAwait(false);
-            await ApplyAsync(
-                new JobTransition
-                {
-                    JobId = job.Id,
-                    ExpectedWorkerId = "millrace-test-host",
-                    ExpectedAttempt = job.Attempt,
-                    TargetState = JobState.Succeeded,
-                    Failures = job.Failures,
-                    FinishedAt = Time.GetUtcNow(),
-                    ActivateContinuations = true,
-                    Enqueue = effects.Enqueue,
-                    Bookmarks = effects.Bookmarks,
-                    Checkpoint = effects.Checkpoint,
-                },
-                effects,
-                ct).ConfigureAwait(false);
+            await ApplyAsync(JobOutcomes.Succeeded(job, WorkerId, Time.GetUtcNow(), effects), effects, ct)
+                .ConfigureAwait(false);
         }
         catch (Exception e) when (e is not MillraceJobFailedException)
         {
-            var failures = job.Failures + 1;
-            var retry = job.Retry.NextDelay(failures);
+            // Dead-letter observers still fire, so a saga still compensates in a test.
+            var transition = JobOutcomes.Failed(job, WorkerId, Time.GetUtcNow(), e, FailureEffects(job));
+            await _storage.ApplyAsync(transition, ct).ConfigureAwait(false);
 
-            await _storage.ApplyAsync(
-                new JobTransition
-                {
-                    JobId = job.Id,
-                    ExpectedWorkerId = "millrace-test-host",
-                    ExpectedAttempt = job.Attempt,
-                    TargetState = retry is null ? JobState.Dead : JobState.Failed,
-                    Failures = failures,
-                    Error = e.ToString(),
-                    DueAt = retry is null ? null : Time.GetUtcNow() + retry,
-                    FinishedAt = retry is null ? Time.GetUtcNow() : null,
-                    CancelContinuations = retry is null,
-                    // Dead-letter observers still fire, so a saga still compensates in a test.
-                    Enqueue = retry is null ? FailureEffects(job) : [],
-                },
-                ct).ConfigureAwait(false);
-
-            if (retry is null && throwOnFailure)
+            if (transition.TargetState == JobState.Dead && throwOnFailure)
             {
                 throw new MillraceJobFailedException(job, e);
             }
@@ -225,16 +215,8 @@ public sealed class MillraceTestHost : IAsyncDisposable
         }
     }
 
-    private List<JobRecord> FailureEffects(JobRecord job)
-    {
-        var records = new List<JobRecord>();
-        foreach (var observer in _provider.GetServices<IJobFailureObserver>())
-        {
-            records.AddRange(observer.OnDeadLettered(job));
-        }
-
-        return records;
-    }
+    private IReadOnlyList<JobRecord> FailureEffects(JobRecord job)
+        => JobOutcomes.FailureEffects(_provider.GetServices<IJobFailureObserver>(), job, logger: null);
 
     private ValueTask ActivateDueAsync(CancellationToken ct = default)
         => new(_storage.ActivateDueJobsAsync(Time.GetUtcNow(), _options.ActivationBatchSize, ct).AsTask());

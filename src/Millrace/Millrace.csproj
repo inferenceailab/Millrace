@@ -8,6 +8,9 @@
     <!-- The merge rule is engine internals with no public surface, but it is exactly the kind of
          logic that deserves direct unit tests rather than only being exercised through a race. -->
     <InternalsVisibleTo Include="Millrace.Tests" />
+    <!-- The test harness runs jobs, so it needs the same transition rules the worker uses
+         (JobOutcomes). Internal rather than public: these are engine rules, not consumer API. -->
+    <InternalsVisibleTo Include="Millrace.Testing" />
   </ItemGroup>
 
   <ItemGroup>

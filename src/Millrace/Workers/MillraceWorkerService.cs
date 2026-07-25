@@ -159,15 +159,14 @@ internal sealed class MillraceWorkerService(
             if (job.CancelRequested)
             {
                 await ApplyTransitionAsync(Terminal(job, JobState.Cancelled, job.Failures,
-                    "Cancelled by request.", cancelContinuations: true)).ConfigureAwait(false);
+                    "Cancelled by request.")).ConfigureAwait(false);
                 return;
             }
 
-            if (job.Attempt - job.Failures > _options.InterruptionLimit)
+            if (JobOutcomes.IsPoisoned(job, _options.InterruptionLimit))
             {
-                await ApplyTransitionAsync(Terminal(job, JobState.Dead, job.Failures,
-                    $"Poison-pill: claimed {job.Attempt} times with only {job.Failures} recorded " +
-                    "failures — presumed to crash workers.", cancelContinuations: true)).ConfigureAwait(false);
+                await ApplyTransitionAsync(JobOutcomes.Poisoned(
+                    job, _workerId, time.GetUtcNow(), FailureEffects(job))).ConfigureAwait(false);
                 return;
             }
 
@@ -203,28 +202,12 @@ internal sealed class MillraceWorkerService(
             catch (Exception e)
             {
                 RecordCompletion(job, started, "failed");
-                var failures = job.Failures + 1;
-                var error = Truncate(e.ToString());
-                if (job.Retry.NextDelay(failures) is { } delay)
-                {
-                    await ApplyTransitionAsync(new JobTransition
-                    {
-                        JobId = job.Id,
-                        ExpectedWorkerId = _workerId,
-                        ExpectedAttempt = job.Attempt,
-                        TargetState = JobState.Failed,
-                        Failures = failures,
-                        DueAt = time.GetUtcNow() + delay,
-                        Error = error,
-                    }).ConfigureAwait(false);
-                }
-                else
-                {
-                    // A dead job is the last chance to tell a layer above that its work failed:
-                    // nothing of theirs is running, and after this transition the job is gone.
-                    await ApplyTransitionAsync(Terminal(job, JobState.Dead, failures, error,
-                        cancelContinuations: true, effects: FailureEffects(job))).ConfigureAwait(false);
-                }
+
+                // A dead job is the last chance to tell a layer above that its work failed: nothing
+                // of theirs is running, and after this transition the job is gone. JobOutcomes
+                // decides which of the two this is, so the test harness decides it the same way.
+                await ApplyTransitionAsync(JobOutcomes.Failed(
+                    job, _workerId, time.GetUtcNow(), e, FailureEffects(job))).ConfigureAwait(false);
             }
         }
         finally
@@ -325,8 +308,7 @@ internal sealed class MillraceWorkerService(
                 {
                     inFlight.Cancel(CancelReason.CancelRequested);
                     await ApplyTransitionAsync(Terminal(inFlight.Job, JobState.Cancelled,
-                        inFlight.Job.Failures, "Cancelled by request.", cancelContinuations: true))
-                        .ConfigureAwait(false);
+                        inFlight.Job.Failures, "Cancelled by request.")).ConfigureAwait(false);
                 }
                 else
                 {
@@ -423,9 +405,7 @@ internal sealed class MillraceWorkerService(
 
         for (var attempt = 0; ; attempt++)
         {
-            var transition = Terminal(
-                job, JobState.Succeeded, job.Failures, error: null,
-                activateContinuations: true, effects: effects);
+            var transition = JobOutcomes.Succeeded(job, _workerId, time.GetUtcNow(), effects);
 
             try
             {
@@ -479,10 +459,11 @@ internal sealed class MillraceWorkerService(
         }
     }
 
-    private JobTransition Terminal(
-        JobRecord job, JobState state, int failures, string? error,
-        bool activateContinuations = false, bool cancelContinuations = false,
-        JobSideEffects? effects = null) => new()
+    /// <summary>
+    /// A cancelled job's transition. Cancellation is worker-only — the harness has no lease to lose
+    /// and no shutdown to survive — so unlike the success and failure rules it stays here.
+    /// </summary>
+    private JobTransition Terminal(JobRecord job, JobState state, int failures, string? error) => new JobTransition
     {
         JobId = job.Id,
         ExpectedWorkerId = _workerId,
@@ -491,49 +472,11 @@ internal sealed class MillraceWorkerService(
         Failures = failures,
         Error = error,
         FinishedAt = time.GetUtcNow(),
-        ActivateContinuations = activateContinuations,
-        CancelContinuations = cancelContinuations,
-        // Only a successful execution contributes effects: a failing activity must not advance its
-        // workflow, and a cancelled one has nothing to say.
-        Enqueue = effects is null ? [] : effects.Enqueue,
-        Bookmarks = effects is null ? [] : effects.Bookmarks,
-        Checkpoint = effects?.Checkpoint,
+        CancelContinuations = true,
     };
 
-    /// <summary>
-    /// Collects what the observers want committed with a dead-lettered job's transition.
-    /// </summary>
-    /// <remarks>
-    /// An observer that throws must not stop the job being dead-lettered: the transition is the
-    /// important part, and a lost notification is recoverable where a job stuck in Processing is not.
-    /// </remarks>
-    private JobSideEffects? FailureEffects(JobRecord job)
-    {
-        JobSideEffects? effects = null;
-
-        foreach (var observer in failureObservers)
-        {
-            try
-            {
-                var records = observer.OnDeadLettered(job);
-                if (records.Count == 0)
-                {
-                    continue;
-                }
-
-                effects ??= new JobSideEffects();
-                effects.Enqueue.AddRange(records);
-            }
-            catch (Exception e)
-            {
-                logger.LogError(
-                    e, "Failure observer {Observer} threw for job {JobId}; dead-lettering anyway.",
-                    observer.GetType().Name, job.Id);
-            }
-        }
-
-        return effects;
-    }
+    private IReadOnlyList<JobRecord> FailureEffects(JobRecord job)
+        => JobOutcomes.FailureEffects(failureObservers, job, logger);
 
     /// <summary>Records duration and outcome for one finished execution.</summary>
     private void RecordCompletion(JobRecord job, long startedAt, string outcome)
@@ -548,7 +491,11 @@ internal sealed class MillraceWorkerService(
         MillraceDiagnostics.JobsCompleted.Add(1, tags);
     }
 
-    private JobTransition Release(JobRecord job) => new()
+    /// <summary>
+    /// Hands a job back on shutdown: a fenced release, with no retry budget spent. Worker-only for
+    /// the same reason cancellation is — the harness has no lease and no shutdown.
+    /// </summary>
+    private JobTransition Release(JobRecord job) => new JobTransition
     {
         JobId = job.Id,
         ExpectedWorkerId = _workerId,
