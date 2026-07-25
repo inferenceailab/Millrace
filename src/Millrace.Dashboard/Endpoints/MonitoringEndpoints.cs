@@ -27,6 +27,7 @@ internal static class MonitoringEndpoints
     {
         api.MapGet("/statistics", GetStatisticsAsync)
             .WithName("GetStatistics")
+            .Produces<JobStatistics>()
             .WithSummary("Aggregate counts for the overview.")
             .WithDescription(
                 "The only source of counts. List endpoints deliberately carry no totals, because "
@@ -34,6 +35,7 @@ internal static class MonitoringEndpoints
 
         api.MapGet("/jobs", QueryJobsAsync)
             .WithName("QueryJobs")
+            .Produces<Page<JobSummary>>()
             .WithSummary("Jobs, newest first, filtered and cursor-paged.")
             .WithDescription(
                 "Repeat 'state' to include several states. Pass 'cursor' from the previous response's "
@@ -41,6 +43,7 @@ internal static class MonitoringEndpoints
 
         api.MapGet("/jobs/{id:guid}", GetJobDetailsAsync)
             .WithName("GetJobDetails")
+            .Produces<JobDetails>()
             .WithSummary("Full detail for one job, including its serialized arguments.")
             .WithDescription(
                 "Reports attempt, failure and interruption counts plus the most recent error. "
@@ -48,6 +51,7 @@ internal static class MonitoringEndpoints
 
         api.MapGet("/recurring", QueryRecurringAsync)
             .WithName("QueryRecurring")
+            .Produces<Page<RecurringSummary>>()
             .WithSummary("Recurring definitions, soonest first.")
             .WithDescription(
                 "Ordered forwards in time, unlike the job and instance lists. A next fire time in the "
@@ -56,18 +60,19 @@ internal static class MonitoringEndpoints
 
         api.MapGet("/instances", QueryInstancesAsync)
             .WithName("QueryInstances")
+            .Produces<Page<WorkflowInstanceSummary>>()
             .WithSummary("Workflow instances, newest first, filtered and cursor-paged.")
             .WithDescription("The workflow engine lands in 0.3; this reads whatever instances exist.");
     }
 
-    private static async Task<Ok<JobStatistics>> GetStatisticsAsync(
+    private static async Task<JsonHttpResult<JobStatistics>> GetStatisticsAsync(
         IMonitoringStorage storage,
         CancellationToken ct,
         [FromQuery] string? tenant = null,
         [FromQuery] bool untenanted = false)
-        => TypedResults.Ok(await storage.GetStatisticsAsync(ResolveTenant(tenant, untenanted), ct));
+        => DashboardJson.Ok(await storage.GetStatisticsAsync(ResolveTenant(tenant, untenanted), ct));
 
-    private static async Task<Ok<Page<JobSummary>>> QueryJobsAsync(
+    private static async Task<JsonHttpResult<Page<JobSummary>>> QueryJobsAsync(
         IMonitoringStorage storage,
         CancellationToken ct,
         [FromQuery(Name = "state")] JobState[]? states = null,
@@ -78,7 +83,7 @@ internal static class MonitoringEndpoints
         [FromQuery] DateTimeOffset? createdBefore = null,
         [FromQuery] string? cursor = null,
         [FromQuery] int limit = JobQuery.DefaultLimit)
-        => TypedResults.Ok(await storage.QueryJobsAsync(
+        => DashboardJson.Ok(await storage.QueryJobsAsync(
             new JobQuery
             {
                 States = states,
@@ -91,14 +96,14 @@ internal static class MonitoringEndpoints
             },
             ct));
 
-    private static async Task<Results<Ok<JobDetails>, NotFound>> GetJobDetailsAsync(
+    private static async Task<Results<JsonHttpResult<JobDetails>, NotFound>> GetJobDetailsAsync(
         IMonitoringStorage storage, Guid id, CancellationToken ct)
     {
         var details = await storage.GetJobDetailsAsync(new JobId(id), ct);
-        return details is null ? TypedResults.NotFound() : TypedResults.Ok(details);
+        return details is null ? TypedResults.NotFound() : DashboardJson.Ok(details);
     }
 
-    private static async Task<Ok<Page<RecurringSummary>>> QueryRecurringAsync(
+    private static async Task<JsonHttpResult<Page<RecurringSummary>>> QueryRecurringAsync(
         IMonitoringStorage storage,
         CancellationToken ct,
         [FromQuery] string? queue = null,
@@ -106,7 +111,7 @@ internal static class MonitoringEndpoints
         [FromQuery] bool untenanted = false,
         [FromQuery] string? cursor = null,
         [FromQuery] int limit = RecurringQuery.DefaultLimit)
-        => TypedResults.Ok(await storage.QueryRecurringAsync(
+        => DashboardJson.Ok(await storage.QueryRecurringAsync(
             new RecurringQuery
             {
                 Queue = queue,
@@ -116,7 +121,7 @@ internal static class MonitoringEndpoints
             },
             ct));
 
-    private static async Task<Ok<Page<WorkflowInstanceSummary>>> QueryInstancesAsync(
+    private static async Task<JsonHttpResult<Page<WorkflowInstanceSummary>>> QueryInstancesAsync(
         IMonitoringStorage storage,
         CancellationToken ct,
         [FromQuery(Name = "state")] WorkflowInstanceState[]? states = null,
@@ -128,7 +133,7 @@ internal static class MonitoringEndpoints
         [FromQuery] DateTimeOffset? createdBefore = null,
         [FromQuery] string? cursor = null,
         [FromQuery] int limit = InstanceQuery.DefaultLimit)
-        => TypedResults.Ok(await storage.QueryInstancesAsync(
+        => DashboardJson.Ok(await storage.QueryInstancesAsync(
             new InstanceQuery
             {
                 States = states,

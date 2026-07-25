@@ -176,7 +176,7 @@ public static class MillraceDashboardEndpointRouteBuilderExtensions
 
     private static void MapMetaEndpoints(IEndpointRouteBuilder api)
     {
-        api.MapGet("/info", (IMonitoringStorage storage) => TypedResults.Ok(new DashboardInfo(
+        api.MapGet("/info", (IMonitoringStorage storage) => DashboardJson.Ok(new DashboardInfo(
                 MillraceDashboard.ApiVersion,
                 storage.GetType().FullName ?? storage.GetType().Name)))
             .WithName("GetDashboardInfo")

@@ -26,7 +26,7 @@ const tabs = [
         <h1>Millrace</h1>
         <span class="sub">Durable jobs and workflow orchestration</span>
         @if (info().data; as info) {
-          <span class="sub">{{ info.version }} · {{ info.storageProvider }}</span>
+          <span class="sub">{{ info.apiVersion }} · {{ info.storageProvider }}</span>
         }
       </header>
 

@@ -33,6 +33,7 @@ internal static class ManagementEndpoints
 
         api.MapPost("/jobs/{id:guid}/requeue", RequeueJobAsync)
             .WithName("RequeueJob")
+            .Produces<RequeuedJob>()
             .WithSummary("Runs a finished job again as a new job.")
             .WithDescription(
                 "Returns the new job's id. The original is left untouched — terminal records are "
@@ -60,14 +61,14 @@ internal static class ManagementEndpoints
             // contract: neither is something an operator can act on differently.
             : TypedResults.NotFound();
 
-    private static async Task<Results<Ok<RequeuedJob>, NotFound, Conflict<string>>> RequeueJobAsync(
+    private static async Task<Results<JsonHttpResult<RequeuedJob>, NotFound, Conflict<string>>> RequeueJobAsync(
         IJobClient jobs, Guid id, CancellationToken ct)
     {
         try
         {
             var requeued = await jobs.RequeueAsync(new JobId(id), ct);
             return requeued is { } newId
-                ? TypedResults.Ok(new RequeuedJob(newId))
+                ? DashboardJson.Ok(new RequeuedJob(newId))
                 : TypedResults.NotFound();
         }
         catch (InvalidOperationException e)
