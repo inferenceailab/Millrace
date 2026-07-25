@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>PostgreSQL storage provider for Millrace: FOR UPDATE SKIP LOCKED claiming, LISTEN/NOTIFY wakeups, PostgreSQL 15+. Verified by the Millrace.Storage.Verification conformance kit.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Millrace\Millrace.csproj" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+</Project>

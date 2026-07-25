@@ -3,7 +3,7 @@
 > **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-25 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
-**11 done · 38 open** (of which 7 blocked on an unresolved spike).
+**11 done · 39 open** (of which 7 blocked on an unresolved spike).
 
 ## Epics
 
@@ -66,6 +66,7 @@ PostgreSQL provider; dashboard REST API + OpenAPI contract; React UI (read-only)
 | [#32](https://github.com/inferenceailab/Millrace/issues/32) | Millrace.Dashboard.Ui.React: embedded read-only reference UI | dashboard | open |
 | [#33](https://github.com/inferenceailab/Millrace/issues/33) | Client-facing job cancellation API | substrate | open |
 | [#34](https://github.com/inferenceailab/Millrace/issues/34) | Sample: minimal API host running jobs on PostgreSQL | docs | open |
+| [#50](https://github.com/inferenceailab/Millrace/issues/50) | Import the prototype source tree and apply the Millrace rename | build | open |
 
 ## 0.3 — Workflow engine core
 

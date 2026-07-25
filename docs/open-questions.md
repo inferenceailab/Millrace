@@ -31,13 +31,12 @@ exist, and every list view in every UI binds to `Page<T>`. Note the job substrat
 order by `Priority DESC` then FIFO (§11.8) — cursor pagination must be stable under that ordering
 while jobs change state underneath it.
 
-### Q3. Default authorization posture for `IWeftDashboardAuthorization`
+### Q3. Default authorization posture for `IMillraceDashboardAuthorization`
 
 What happens when a consumer mounts the dashboard without configuring authorization? Proposed:
 deny by default outside Development. The alternative is allow-by-default with a startup warning.
 
-*Why it blocks:* it is a security default that becomes a breaking change to tighten later. Note the
-interface name itself needs renaming to `IMillraceDashboardAuthorization` as part of this work.
+*Why it blocks:* it is a security default, and defaults are breaking changes to tighten later.
 
 ### Q4. Where `IMonitoringStorage` lives
 

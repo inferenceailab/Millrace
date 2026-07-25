@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Millrace.Storage.PostgreSql/Millrace.Storage.PostgreSql.csproj" />
+    <Project Path="src/Millrace.Storage.Verification/Millrace.Storage.Verification.csproj" />
+    <Project Path="src/Millrace/Millrace.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Millrace.Storage.PostgreSql.Tests/Millrace.Storage.PostgreSql.Tests.csproj" />
+    <Project Path="test/Millrace.Tests/Millrace.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- Mirrors Millrace.Tests: explicit CancellationToken.None matches the conformance kit's style. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Millrace.Storage.PostgreSql\Millrace.Storage.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Storage.Verification\Millrace.Storage.Verification.csproj" />
+  </ItemGroup>
+
+</Project>
