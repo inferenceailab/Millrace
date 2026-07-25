@@ -192,6 +192,80 @@ public sealed class WorkflowSagaTests
         Assert.Empty(data.Undone);
     }
 
+    /// <summary>
+    /// Drives a saga to the suspended half-undone state, then hands it to an operator (§11.30).
+    /// </summary>
+    private static async Task<(IWorkflowClient Client, WorkflowInstanceId Id, IWorkflowStorage Storage)>
+        SuspendedUnwindAsync(IHost host, FakeTimeProvider time, Order seed)
+    {
+        await host.StartAsync();
+        var client = host.Services.GetRequiredService<IWorkflowClient>();
+        var storage = host.Services.GetRequiredService<IWorkflowStorage>();
+        var id = await client.StartAsync("checkout", seed);
+
+        await Eventually.ObservedAsync(
+            async () => await storage.GetInstanceAsync(id, CancellationToken.None),
+            i => { time.Advance(TimeSpan.FromMilliseconds(200)); return i?.State == WorkflowInstanceState.Suspended; },
+            "the failed compensation to suspend the instance");
+
+        return (client, id, storage);
+    }
+
+    private static Task<WorkflowInstanceRecord?> SettlesAtAsync(
+        IWorkflowStorage storage, FakeTimeProvider time, WorkflowInstanceId id, WorkflowInstanceState state)
+        => Eventually.ObservedAsync(
+            async () => await storage.GetInstanceAsync(id, CancellationToken.None),
+            i => { time.Advance(TimeSpan.FromMilliseconds(200)); return i?.State == state; },
+            $"the instance to reach {state}");
+
+    [Fact]
+    public async Task Abandoning_a_failed_compensation_fails_the_instance_and_undoes_no_more()
+    {
+        var time = NewTime();
+        using var host = BuildHost(time);
+        var (client, id, storage) = await SuspendedUnwindAsync(
+            host, time, new Order { FailCharge = true, FailCompensation = true });
+
+        Assert.True(await client.RecoverCompensationAsync(id, CompensationRecovery.Abandon));
+
+        // The decision is that the remaining steps should stand: terminal, and nothing further runs.
+        var instance = await SettlesAtAsync(storage, time, id, WorkflowInstanceState.Failed);
+        Assert.Equal(WorkflowInstanceState.Failed, instance!.State);
+        Assert.Empty((await client.GetDataAsync<Order>(id))!.Undone);
+    }
+
+    [Fact]
+    public async Task Skipping_a_failed_compensation_carries_on_unwinding()
+    {
+        var time = NewTime();
+        using var host = BuildHost(time);
+        var (client, id, storage) = await SuspendedUnwindAsync(
+            host, time, new Order { FailCharge = true, FailCompensation = true });
+
+        Assert.True(await client.RecoverCompensationAsync(id, CompensationRecovery.Skip));
+
+        // Skip records the operator's assertion that the step is undone — it deliberately does not
+        // run the compensation, so "released" never appears even though the unwind completes.
+        var instance = await SettlesAtAsync(storage, time, id, WorkflowInstanceState.Compensated);
+        Assert.Equal(WorkflowInstanceState.Compensated, instance!.State);
+        Assert.Empty((await client.GetDataAsync<Order>(id))!.Undone);
+    }
+
+    [Fact]
+    public async Task Recovering_something_that_is_not_suspended_reports_false()
+    {
+        var time = NewTime();
+        using var host = BuildHost(time);
+        await host.StartAsync();
+
+        var client = host.Services.GetRequiredService<IWorkflowClient>();
+        var id = await client.StartAsync("checkout", new Order());
+
+        // The stale-button case: an ordinary answer, not a fault, so the dashboard can re-read
+        // rather than alarm.
+        Assert.False(await client.RecoverCompensationAsync(id, CompensationRecovery.Retry));
+    }
+
     [Fact]
     public void The_exported_shape_records_each_step_and_its_compensation()
     {

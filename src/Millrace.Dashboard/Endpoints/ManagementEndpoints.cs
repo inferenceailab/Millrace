@@ -45,6 +45,17 @@ internal static class ManagementEndpoints
             .WithSummary("Fires a recurring definition now, without disturbing its schedule.")
             .WithDescription("An extra occurrence: the next scheduled fire time is unchanged.");
 
+        // One route with the action in the path rather than three siblings: they are three answers
+        // to one question — what to do about a compensation that failed — and an operator picks
+        // exactly one (§11.30).
+        api.MapPost("/instances/{id:guid}/compensation/{action}", RecoverCompensationAsync)
+            .WithName("RecoverCompensation")
+            .WithSummary("Moves an unwind that a failed compensation left suspended.")
+            .WithDescription(
+                "Action is retry, skip or abandon. 404 means there is nothing to recover — the "
+                + "instance is not suspended mid-unwind, or somebody already recovered it, which is "
+                + "the ordinary answer for a stale button rather than a fault.");
+
         api.MapPost("/signals/{name}/{correlationId}", SendSignalAsync)
             .WithName("SendSignal")
             .WithSummary("Delivers a signal to a waiting workflow instance.")
@@ -85,6 +96,20 @@ internal static class ManagementEndpoints
     private static async Task<Results<Ok, NotFound>> TriggerRecurringAsync(
         IJobClient jobs, string id, CancellationToken ct)
         => await jobs.TriggerRecurringAsync(id, ct) ? TypedResults.Ok() : TypedResults.NotFound();
+
+    private static async Task<Results<Ok, NotFound, BadRequest<string>>> RecoverCompensationAsync(
+        IWorkflowClient workflows, Guid id, string action, CancellationToken ct)
+    {
+        if (!Enum.TryParse<CompensationRecovery>(action, ignoreCase: true, out var recovery))
+        {
+            return TypedResults.BadRequest(
+                $"Unknown recovery action '{action}'. Expected retry, skip or abandon.");
+        }
+
+        return await workflows.RecoverCompensationAsync(new WorkflowInstanceId(id), recovery, ct)
+            ? TypedResults.Ok()
+            : TypedResults.NotFound();
+    }
 
     private static async Task<Results<Ok, NotFound>> SendSignalAsync(
         IWorkflowClient workflows, string name, string correlationId, HttpRequest request, CancellationToken ct)

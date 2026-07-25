@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Millrace.Storage;
 
 namespace Millrace.Workflows;
@@ -7,6 +8,7 @@ namespace Millrace.Workflows;
 /// <inheritdoc cref="IWorkflowClient"/>
 internal sealed class WorkflowClient(
     IWorkflowStorage workflows,
+    IServiceProvider services,
     IJobStorage jobs,
     WorkflowRegistry registry,
     Tenancy.ITenantContextAccessor tenants,
@@ -118,5 +120,16 @@ internal sealed class WorkflowClient(
 
         await jobs.EnqueueAsync([first], ct).ConfigureAwait(false);
         return instance.Id;
+    }
+    /// <inheritdoc />
+    public async ValueTask<bool> RecoverCompensationAsync(
+        WorkflowInstanceId id, CompensationRecovery action, CancellationToken ct = default)
+    {
+        // Resolved per call from a scope rather than injected: the dispatcher is scoped, because it
+        // activates the consumer''s activities, and a singleton client cannot hold one. This is the
+        // same shape the worker uses to run an activity.
+        await using var scope = services.CreateAsyncScope();
+        var dispatcher = scope.ServiceProvider.GetRequiredService<IWorkflowDispatcher>();
+        return await dispatcher.RecoverCompensationAsync(id.Value, action, ct).ConfigureAwait(false);
     }
 }

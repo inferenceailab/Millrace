@@ -50,4 +50,23 @@ public interface IWorkflowClient
     /// </summary>
     ValueTask<bool> SignalAsync(
         string name, string correlationId, string? payloadJson, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves an unwind that a failed compensation left suspended (§11.30).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A half-undone saga is parked rather than forced to a terminal state, because it is exactly
+    /// where a human should look. This is the way out, and the engine cannot choose between the
+    /// three options — which is right depends on what the compensation was undoing and whether it
+    /// is now safe to try again, neither of which the engine knows.
+    /// </para>
+    /// <para>
+    /// Returns false when there is nothing to recover: the instance is not suspended mid-unwind, or
+    /// somebody already recovered it. That is an ordinary answer for a stale dashboard button, not
+    /// a fault.
+    /// </para>
+    /// </remarks>
+    ValueTask<bool> RecoverCompensationAsync(
+        WorkflowInstanceId id, CompensationRecovery action, CancellationToken ct = default);
 }
