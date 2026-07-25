@@ -119,4 +119,27 @@ internal sealed class WorkflowClient(
         await jobs.EnqueueAsync([first], ct).ConfigureAwait(false);
         return instance.Id;
     }
+
+    /// <inheritdoc />
+    public async ValueTask<bool> RecoverCompensationAsync(
+        WorkflowInstanceId id, CompensationRecovery action, CancellationToken ct = default)
+    {
+        var instance = await workflows.GetInstanceAsync(id, ct).ConfigureAwait(false);
+        if (instance is not { State: WorkflowInstanceState.Suspended })
+        {
+            return false;
+        }
+
+        // Enqueued rather than applied here. The dispatcher commits nothing of its own — an
+        // instance change reaches storage only by riding a job's transition (§11.16) — so a direct
+        // call would compute the right checkpoint and discard it. Going through a job also means
+        // the decision inherits retries and dashboard visibility, exactly as an activity does.
+        await jobs.EnqueueAsync(
+            [WorkflowJobFactory.CreateRecovery(id, instance.TenantId, action, _options, time)],
+            ct).ConfigureAwait(false);
+
+        // Accepted, not done: the check above is advisory and the job re-checks when it runs, so a
+        // second operator clicking at the same moment finds nothing to do and the job is a no-op.
+        return true;
+    }
 }

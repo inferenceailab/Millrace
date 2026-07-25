@@ -79,6 +79,9 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
     public Task CompensateAsync(Guid instanceId, string sagaId, string stepNodeId, CancellationToken ct)
         => RunAsync(instanceId, walker => walker.CompensateAsync(sagaId, stepNodeId, ct), ct);
 
+    public Task RecoverCompensationAsync(Guid instanceId, CompensationRecovery action, CancellationToken ct)
+        => RunAsync(instanceId, walker => walker.RecoverAsync(action, ct), ct);
+
     private async Task RunAsync(Guid instanceId, Func<Walker, Task> run, CancellationToken ct)
     {
         var id = new WorkflowInstanceId(instanceId);
@@ -112,6 +115,8 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
         public abstract Task FailAsync(string nodeId);
 
         public abstract Task CompensateAsync(string sagaId, string stepNodeId, CancellationToken ct);
+
+        public abstract Task RecoverAsync(CompensationRecovery action, CancellationToken ct);
     }
 
     private sealed class Walker<TData> : Walker
@@ -291,6 +296,77 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                 sagas: sagas,
                 scheduled: next,
                 bookmarks: []);
+        }
+
+        /// <summary>
+        /// Moves a suspended unwind forward on an operator's instruction (§11.30).
+        /// </summary>
+        /// <remarks>
+        /// Deliberately expressed as a checkpoint like every other transition, rather than as a
+        /// special repair path: the instance is advanced by the same optimistic revision write that
+        /// the engine uses, so an operator clicking twice, or two operators clicking at once, loses
+        /// the race exactly as a duplicate job delivery would.
+        /// </remarks>
+        public override Task RecoverAsync(CompensationRecovery action, CancellationToken ct)
+        {
+            var sagas = new Dictionary<string, SagaState>(_cursor.Sagas, StringComparer.Ordinal);
+
+            // Only a saga that is mid-unwind can be recovered. A suspended instance that is not
+            // compensating was parked by a Suspend policy (§11.28) and has nothing to resume from
+            // here — which is why this reports false rather than inventing a state to move to.
+            if (_instance.State != WorkflowInstanceState.Suspended
+                || sagas.FirstOrDefault(s => s.Value.Compensating) is not { Value.Completed.Count: > 0 } entry)
+            {
+                return Task.CompletedTask;
+            }
+
+            var (sagaId, saga) = (entry.Key, entry.Value);
+            var joins = new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal);
+            var waits = new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal);
+
+            switch (action)
+            {
+                case CompensationRecovery.Abandon:
+                    // The remaining steps stay done, and the saga state is dropped so nothing later
+                    // mistakes this for an unwind still in progress.
+                    sagas.Remove(sagaId);
+                    Checkpoint(WorkflowInstanceState.Failed, joins, waits, sagas, scheduled: [], bookmarks: []);
+                    return Task.CompletedTask;
+
+                case CompensationRecovery.Skip:
+                {
+                    // Drops the step without running its compensation: the operator is asserting it
+                    // is undone, which the engine cannot verify and must not pretend to.
+                    var remaining = saga.Completed.Take(saga.Completed.Count - 1).ToList();
+                    if (remaining.Count == 0)
+                    {
+                        sagas.Remove(sagaId);
+                        Checkpoint(
+                            WorkflowInstanceState.Compensated, joins, waits, sagas,
+                            scheduled: [], bookmarks: []);
+                        return Task.CompletedTask;
+                    }
+
+                    sagas[sagaId] = saga with { Completed = remaining };
+                    Checkpoint(
+                        WorkflowInstanceState.Running, joins, waits, sagas,
+                        scheduled: [WorkflowJobFactory.CreateCompensation(
+                            _instance, sagaId, remaining[^1], _owner._options, _owner._time)],
+                        bookmarks: []);
+                    return Task.CompletedTask;
+                }
+
+                default:
+                    // Retry: the same step again, with the saga state untouched. A fresh job, so it
+                    // gets a fresh retry budget — the previous one is spent, and refusing to reset it
+                    // would make the button useless the moment it was needed.
+                    Checkpoint(
+                        WorkflowInstanceState.Running, joins, waits, sagas,
+                        scheduled: [WorkflowJobFactory.CreateCompensation(
+                            _instance, sagaId, saga.Completed[^1], _owner._options, _owner._time)],
+                        bookmarks: []);
+                    return Task.CompletedTask;
+            }
         }
 
         /// <summary>Publishes a checkpoint with an explicit state, for the paths that do not route.</summary>

@@ -596,11 +596,31 @@ export function Signals() {
 
 export function Instances() {
   const [definitionId, setDefinitionId] = useState('')
+  const [nonce, setNonce] = useState(0)
   const page = useCursorStack(definitionId)
   const { data, error, loading } = useAsync(
     () => api.instances({ definitionId: definitionId || undefined, cursor: page.cursor, limit: 25 }),
-    [definitionId, page.cursor],
+    [definitionId, page.cursor, nonce],
   )
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  async function recover(id: string, action: 'retry' | 'skip' | 'abandon') {
+    setBusy(true)
+    setActionError(null)
+    try {
+      await api.recoverCompensation(id, action)
+    } catch (e: unknown) {
+      // 404 is "nothing to recover" — a stale button, not a fault. Re-reading is the right answer
+      // either way, so it is not reported as an error.
+      if (!(e instanceof ApiError && e.status === 404)) {
+        setActionError(errorMessage(e))
+      }
+    } finally {
+      setBusy(false)
+      setNonce((n) => n + 1)
+    }
+  }
 
   return (
     <>
@@ -619,6 +639,7 @@ export function Instances() {
 
       {loading && <Loading />}
       {error && <ErrorNotice message={error} />}
+      {actionError && <ErrorNotice message={actionError} />}
       {data && (
         <>
           <div className="table-scroll">
@@ -631,6 +652,7 @@ export function Instances() {
                   <th>Created</th>
                   <th>Last checkpoint</th>
                   <th className="num">Revision</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -647,11 +669,27 @@ export function Instances() {
                     <td>{formatTime(instance.createdAt)}</td>
                     <td>{formatTime(instance.updatedAt)}</td>
                     <td className="num">{instance.revision}</td>
+                    <td>
+                      {instance.state === 'Suspended' && (
+                        <div className="controls" style={{ marginBottom: 0 }}>
+                          {(['retry', 'skip', 'abandon'] as const).map((action) => (
+                            <button
+                              key={action}
+                              type="button"
+                              disabled={busy}
+                              onClick={() => recover(instance.id, action)}
+                            >
+                              {action}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {data.items.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="muted">
+                    <td colSpan={7} className="muted">
                       No workflow instances. The engine lands in 0.3.
                     </td>
                   </tr>

@@ -165,6 +165,15 @@ export const api = {
    * Delivers a signal to a waiting instance. Delivery is at-most-once, so a 404 means nothing was
    * waiting on that name and correlation id — which is a normal answer, not a fault.
    */
+  /**
+   * Moves an unwind that a failed compensation left suspended.
+   *
+   * 404 means there is nothing to recover — not suspended mid-unwind, or somebody already did it.
+   * That is the ordinary answer for a stale button, so callers should re-read rather than alarm.
+   */
+  recoverCompensation: (instanceId: string, action: 'retry' | 'skip' | 'abandon') =>
+    post(`/instances/${instanceId}/compensation/${action}`).then(() => undefined),
+
   sendSignal: (name: string, correlationId: string, payloadJson: string) =>
     post(
       `/signals/${encodeURIComponent(name)}/${encodeURIComponent(correlationId)}`,

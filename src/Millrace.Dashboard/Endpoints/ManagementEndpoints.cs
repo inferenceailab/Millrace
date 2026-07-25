@@ -45,6 +45,19 @@ internal static class ManagementEndpoints
             .WithSummary("Fires a recurring definition now, without disturbing its schedule.")
             .WithDescription("An extra occurrence: the next scheduled fire time is unchanged.");
 
+        // One route with the action in the path rather than three siblings: they are three answers
+        // to one question — what to do about a compensation that failed — and an operator picks
+        // exactly one (§11.30).
+        api.MapPost("/instances/{id:guid}/compensation/{action}", RecoverCompensationAsync)
+            .WithName("RecoverCompensation")
+            .WithSummary("Moves an unwind that a failed compensation left suspended.")
+            .WithDescription(
+                "Action is retry, skip or abandon. 202 means the decision was accepted, not that it "
+                + "has been applied: it runs as a job, so it inherits retries and appears in the job "
+                + "list like any other work. 404 means there was nothing to recover — the instance is "
+                + "not suspended, or somebody already recovered it — which is the ordinary answer for "
+                + "a stale button rather than a fault.");
+
         api.MapPost("/signals/{name}/{correlationId}", SendSignalAsync)
             .WithName("SendSignal")
             .WithSummary("Delivers a signal to a waiting workflow instance.")
@@ -85,6 +98,23 @@ internal static class ManagementEndpoints
     private static async Task<Results<Ok, NotFound>> TriggerRecurringAsync(
         IJobClient jobs, string id, CancellationToken ct)
         => await jobs.TriggerRecurringAsync(id, ct) ? TypedResults.Ok() : TypedResults.NotFound();
+
+    private static async Task<Results<Accepted, NotFound, BadRequest<string>>> RecoverCompensationAsync(
+        IWorkflowClient workflows, Guid id, string action, CancellationToken ct)
+    {
+        if (!Enum.TryParse<CompensationRecovery>(action, ignoreCase: true, out var recovery))
+        {
+            return TypedResults.BadRequest(
+                $"Unknown recovery action '{action}'. Expected retry, skip or abandon.");
+        }
+
+        // 202, not 200: the decision is carried into the engine by a job, so this reports that it
+        // was accepted rather than that the unwind has moved. Saying 200 would promise something
+        // the caller could then fail to observe on the very next read.
+        return await workflows.RecoverCompensationAsync(new WorkflowInstanceId(id), recovery, ct)
+            ? TypedResults.Accepted((string?)null)
+            : TypedResults.NotFound();
+    }
 
     private static async Task<Results<Ok, NotFound>> SendSignalAsync(
         IWorkflowClient workflows, string name, string correlationId, HttpRequest request, CancellationToken ct)

@@ -21,6 +21,7 @@ internal static class WorkflowJobFactory
     private static readonly string StringType = TypeNameFormatter.Format(typeof(string));
     private static readonly string IntType = TypeNameFormatter.Format(typeof(int));
     private static readonly string TokenType = TypeNameFormatter.Format(typeof(CancellationToken));
+    private static readonly string RecoveryType = TypeNameFormatter.Format(typeof(CompensationRecovery));
 
     public static JobRecord Create(
         WorkflowInstanceRecord instance, string nodeId, string? joinKey, int loopIndex, TimeSpan? delay,
@@ -82,6 +83,24 @@ internal static class WorkflowJobFactory
             nameof(IWorkflowDispatcher.CompensateAsync),
             [GuidType, StringType, StringType, TokenType],
             [Json(instance.Id.Value, options), Json(sagaId, options), Json(stepNodeId, options), null]);
+
+    /// <summary>
+    /// The job that carries an operator's recovery decision into the engine (§11.30).
+    /// </summary>
+    /// <remarks>
+    /// A job rather than a direct write, for the same reason an activity is a job (§6.2): the
+    /// dispatcher commits nothing itself, so the only way an instance change reaches storage is
+    /// riding a job's own transition (§11.16). Going through a job also means the decision inherits
+    /// retries, leases and dashboard visibility instead of being a privileged side door.
+    /// </remarks>
+    public static JobRecord CreateRecovery(
+        WorkflowInstanceId instanceId, string? tenantId, CompensationRecovery action,
+        MillraceOptions options, TimeProvider time)
+        => Build(
+            instanceId, tenantId, nodeId: $"recover-{action}".ToLowerInvariant(), delay: null, options, time,
+            nameof(IWorkflowDispatcher.RecoverCompensationAsync),
+            [GuidType, RecoveryType, TokenType],
+            [Json(instanceId.Value, options), Json(action, options), null]);
 
     private static string Json<T>(T value, MillraceOptions options)
         => JsonSerializer.Serialize(value, options.SerializerOptions);

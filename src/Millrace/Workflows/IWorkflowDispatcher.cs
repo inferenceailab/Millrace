@@ -68,4 +68,51 @@ public interface IWorkflowDispatcher
     /// unwind.
     /// </summary>
     Task CompensateAsync(Guid instanceId, string sagaId, string stepNodeId, CancellationToken ct);
+
+    /// <summary>
+    /// Applies an operator''s recovery decision to a suspended unwind (§11.30).
+    /// </summary>
+    /// <remarks>
+    /// Enqueued by <c>IWorkflowClient.RecoverCompensationAsync</c> rather than called directly, so
+    /// the resulting checkpoint commits with this job''s own transition — the dispatcher writes
+    /// nothing itself. Does nothing if the instance is no longer suspended mid-unwind, which makes
+    /// a duplicate delivery harmless.
+    /// </remarks>
+    Task RecoverCompensationAsync(Guid instanceId, CompensationRecovery action, CancellationToken ct);
+}
+
+/// <summary>
+/// What an operator does about a compensation that failed (§11.30).
+/// </summary>
+/// <remarks>
+/// A half-undone saga is deliberately parked rather than forced to a terminal state, because it is
+/// exactly where a human should look. These are the three ways out, and the engine cannot choose
+/// between them: which is right depends on what the compensation was trying to undo and whether it
+/// is now safe to try again — facts the engine does not have.
+/// </remarks>
+public enum CompensationRecovery
+{
+    /// <summary>
+    /// Run the failed compensation again, from the same point.
+    /// </summary>
+    /// <remarks>The answer when the cause was transient — the downstream system is back.</remarks>
+    Retry = 0,
+
+    /// <summary>
+    /// Treat this step as undone and carry on unwinding the rest.
+    /// </summary>
+    /// <remarks>
+    /// The answer when the step was undone by hand, or turns out to need no undoing. It records a
+    /// decision rather than a fact, which is why it is an operator action and never automatic.
+    /// </remarks>
+    Skip = 1,
+
+    /// <summary>
+    /// Stop unwinding and fail the instance, leaving the remaining steps done.
+    /// </summary>
+    /// <remarks>
+    /// The answer when continuing would do more harm than the half-undone state already has.
+    /// Terminal, and deliberately so: it is a decision that the remaining work should stand.
+    /// </remarks>
+    Abandon = 2,
 }
