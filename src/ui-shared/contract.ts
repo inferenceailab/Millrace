@@ -1,6 +1,11 @@
-// Mirrors the frozen v1 contract (ARCHITECTURE.md §4.1, §11.12). Hand-written rather than
-// generated: the surface is small, and a generator would be another build-time dependency in a
-// package whose whole promise is that consumers install nothing.
+// The frozen v1 dashboard contract (ARCHITECTURE.md §4.1, §11.12), as TypeScript.
+//
+// Shared by every JavaScript UI package. §11.4 committed to "features are designed once in the
+// contract, rendered three times" — a per-UI copy of these types is that commitment broken on the
+// first line, because the copies drift and the UIs stop being clients of one contract.
+//
+// Hand-written rather than generated: the surface is small, and a generator would be another
+// build-time dependency in packages whose whole promise is that consumers install nothing.
 
 export type JobState =
   | 'Scheduled'
@@ -32,9 +37,28 @@ export type WorkflowInstanceState =
   | 'Cancelled'
 
 /**
- * A page of results. There is deliberately no total and no page count — §11.12 removed them
- * because counting a filtered, continuously changing job table is the expensive part of the
- * query. Consequently no view here offers page numbers.
+ * Mirrors `JobStateExtensions.IsTerminal`. Note that `Failed` is deliberately not among them: it
+ * means "waiting to retry", not "finished".
+ */
+export const terminalJobStates: JobState[] = ['Succeeded', 'Dead', 'Cancelled']
+
+/** A terminal job cannot be cancelled — the API would answer 404 and say nothing useful. */
+export function isCancellable(state: JobState): boolean {
+  return !terminalJobStates.includes(state)
+}
+
+/**
+ * Requeue is refused for work still in flight — that is what cancel is for. `Failed` counts as
+ * finished here even though it is not terminal, because `RequeueAsync` accepts it (§11.18).
+ */
+export function isRequeueable(state: JobState): boolean {
+  return terminalJobStates.includes(state) || state === 'Failed'
+}
+
+/**
+ * A page of results. There is deliberately no total and no page count — §11.12 removed them because
+ * counting a filtered, continuously changing job table is the expensive part of the query.
+ * Consequently no view offers page numbers.
  */
 export interface Page<T> {
   items: T[]
@@ -43,6 +67,7 @@ export interface Page<T> {
 }
 
 export interface JobStatistics {
+  /** Every state is present: the conformance kit requires the key even when the count is zero. */
   jobsByState: Record<JobState, number>
   enqueuedByQueue: Record<string, number>
   instancesByState: Record<WorkflowInstanceState, number>
@@ -112,4 +137,15 @@ export interface WorkflowInstanceSummary {
   createdAt: string
   updatedAt: string
   revision: number
+}
+
+export interface DashboardInfo {
+  version: string
+  storageProvider: string
+  supportsWorkflows: boolean
+}
+
+/** The new job's id, returned by requeue. */
+export interface RequeuedJob {
+  id: string
 }

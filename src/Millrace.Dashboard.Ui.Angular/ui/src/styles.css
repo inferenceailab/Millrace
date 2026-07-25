@@ -1,0 +1,5 @@
+/*
+ * Shared with the React UI: one stylesheet, so the two dashboards stay the same product rather than
+ * two that drift apart. See src/ui-shared/README.md.
+ */
+@import '../../../ui-shared/millrace.css';
