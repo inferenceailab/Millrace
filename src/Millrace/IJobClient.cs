@@ -44,4 +44,25 @@ public interface IJobClient
         where T : class;
 
     ValueTask RemoveRecurringAsync(string recurringId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cancels a job, returning whether anything was cancelled.
+    /// </summary>
+    /// <remarks>
+    /// The storage surface for this was frozen in 0.1 (§11.8) with the client API deliberately left
+    /// until now. Pre-active states cancel outright, along with their transitive continuation
+    /// closure. A job already running is asked to stop cooperatively — the flag reaches it through
+    /// lease renewal — so a worker about to finish may still succeed, and this returning
+    /// <see langword="true"/> is not a promise that the work did not happen.
+    /// </remarks>
+    ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fires a recurring definition immediately, without disturbing its schedule.
+    /// </summary>
+    /// <remarks>
+    /// An extra occurrence rather than a rescheduled one: <c>NextFireTime</c> is untouched, so the
+    /// normal cadence continues. Returns false if no such definition is registered.
+    /// </remarks>
+    ValueTask<bool> TriggerRecurringAsync(string recurringId, CancellationToken ct = default);
 }
