@@ -11,7 +11,10 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package metadata">
-    <Authors>Weft contributors</Authors>
+    <Authors>Millrace contributors</Authors>
+    <Product>Millrace</Product>
+    <PackageProjectUrl>https://github.com/inferenceailab/Millrace</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/inferenceailab/Millrace</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile Condition="Exists('$(MSBuildProjectDirectory)/README.md')">README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
