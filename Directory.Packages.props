@@ -9,6 +9,11 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Provider testing">
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
