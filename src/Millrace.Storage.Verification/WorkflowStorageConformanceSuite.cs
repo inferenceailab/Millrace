@@ -22,13 +22,7 @@ public abstract partial class WorkflowStorageConformanceSuite
     /// Data/cursor documents are JSON, not opaque strings: providers may normalize lexical
     /// formatting (jsonb whitespace/key order), so fidelity is asserted semantically.
     /// </summary>
-    protected static void AssertJsonEqual(string expected, string? actual)
-    {
-        Assert.NotNull(actual);
-        Assert.True(
-            JsonNode.DeepEquals(JsonNode.Parse(expected), JsonNode.Parse(actual)),
-            $"JSON documents differ semantically. Expected: {expected} Actual: {actual}");
-    }
+    protected static void AssertJsonEqual(string expected, string? actual) => JsonAssert.Equal(expected, actual);
 
     protected static WorkflowInstanceRecord Instance(TimeProvider time) => new()
     {
