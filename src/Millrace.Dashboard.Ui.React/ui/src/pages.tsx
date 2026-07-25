@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { api } from './api'
-import { jobStates, type JobState } from './types'
+import { api, ApiError } from '../../../ui-shared/api'
+import { isCancellable, isRequeueable, jobStates, type JobState } from '../../../ui-shared/contract'
 import {
   ErrorNotice,
   Loading,
   Pager,
   StateChip,
+  dueText,
+  errorMessage,
   formatTime,
-  relativeToNow,
+  isOverdue,
   useAsync,
   useCursorStack,
 } from './shared'
@@ -197,13 +199,30 @@ export function Jobs() {
 }
 
 export function JobDetail({ id }: { id: string }) {
-  const { data, error, loading } = useAsync(() => api.job(id), [id])
+  const [nonce, setNonce] = useState(0)
+  const { data, error, loading } = useAsync(() => api.job(id), [id, nonce])
+  const [action, setAction] = useState<{ message?: string; error?: string; busy: boolean }>({
+    busy: false,
+  })
+
+  async function run(act: () => Promise<string>) {
+    setAction({ busy: true })
+    try {
+      setAction({ busy: false, message: await act() })
+      setNonce((n) => n + 1)
+    } catch (e: unknown) {
+      setAction({ busy: false, error: errorMessage(e) })
+    }
+  }
 
   if (loading) return <Loading />
   if (error) return <ErrorNotice message={error} />
   if (!data) return null
 
   const s = data.summary
+  const cancellable = isCancellable(s.state)
+  const requeueable = isRequeueable(s.state)
+
   return (
     <>
       <p>
@@ -212,6 +231,45 @@ export function JobDetail({ id }: { id: string }) {
       <h2>
         {s.methodName} <StateChip state={s.state} />
       </h2>
+
+      <div className="controls">
+        <button
+          type="button"
+          disabled={action.busy || !cancellable}
+          onClick={() =>
+            run(async () => {
+              await api.cancelJob(id)
+              // Deliberately not "cancelled": a running job is asked to stop, and the answer does
+              // not promise the work did not happen.
+              return 'Cancellation requested.'
+            })
+          }
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={action.busy || !requeueable}
+          onClick={() =>
+            run(async () => {
+              const requeued = await api.requeueJob(id)
+              window.location.hash = `#/jobs/${requeued.id}`
+              return 'Requeued.'
+            })
+          }
+        >
+          Requeue
+        </button>
+        {action.message && <span className="muted">{action.message}</span>}
+        {action.error && <span className="overdue">{action.error}</span>}
+      </div>
+      <p className="muted">
+        {cancellable
+          ? 'Cancelling a running job is cooperative — it is asked to stop, and one about to finish may still succeed.'
+          : requeueable
+            ? 'Requeue runs this work again as a new job. This record has finished and stays as it is; the new job links back to it.'
+            : ''}
+      </p>
       <dl className="detail-grid">
         <dt>Id</dt>
         <dd className="mono">{s.id}</dd>
@@ -278,18 +336,39 @@ export function JobDetail({ id }: { id: string }) {
 
 export function Recurring() {
   const page = useCursorStack('recurring')
+  const [nonce, setNonce] = useState(0)
   const { data, error, loading } = useAsync(
     () => api.recurring({ cursor: page.cursor, limit: 25 }),
-    [page.cursor],
+    [page.cursor, nonce],
   )
+  const [triggered, setTriggered] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function trigger(id: string) {
+    setBusy(true)
+    setTriggered(null)
+    setActionError(null)
+    try {
+      await api.triggerRecurring(id)
+      setTriggered(id)
+      // The definition's own row does not change — NextFireTime is deliberately untouched — but the
+      // job it enqueued is now real, so anything derived from the list should be re-read.
+      setNonce((n) => n + 1)
+    } catch (e: unknown) {
+      setActionError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (loading) return <Loading />
   if (error) return <ErrorNotice message={error} />
   if (!data) return null
 
-  const now = Date.now()
   return (
     <>
+      {actionError && <ErrorNotice message={actionError} />}
       <div className="table-scroll">
         <table>
           <thead>
@@ -299,11 +378,12 @@ export function Recurring() {
               <th>Queue</th>
               <th>Next fire</th>
               <th>Last fired</th>
+              <th />
             </tr>
           </thead>
           <tbody>
             {data.items.map((definition) => {
-              const overdue = new Date(definition.nextFireTime).getTime() < now
+              const overdue = isOverdue(definition.nextFireTime)
               return (
                 <tr key={definition.id}>
                   <td>
@@ -315,16 +395,22 @@ export function Recurring() {
                   <td className={overdue ? 'overdue' : undefined}>
                     {formatTime(definition.nextFireTime)}
                     <div className={overdue ? 'overdue' : 'muted'}>
-                      {overdue ? `overdue by ${relativeToNow(definition.nextFireTime).replace(' ago', '')}` : relativeToNow(definition.nextFireTime)}
+                      {dueText(definition.nextFireTime)}
                     </div>
                   </td>
                   <td>{formatTime(definition.lastFireTime)}</td>
+                  <td>
+                    <button type="button" disabled={busy} onClick={() => trigger(definition.id)}>
+                      Run now
+                    </button>
+                    {triggered === definition.id && <div className="muted">Fired.</div>}
+                  </td>
                 </tr>
               )
             })}
             {data.items.length === 0 && (
               <tr>
-                <td colSpan={5} className="muted">
+                <td colSpan={6} className="muted">
                   No recurring definitions.
                 </td>
               </tr>
@@ -340,9 +426,116 @@ export function Recurring() {
         count={data.items.length}
       />
       <p className="muted" style={{ marginTop: 12 }}>
-        Last fired records when a definition ran, not whether it succeeded — fired jobs carry no link
-        back to their definition, so the outcome cannot be shown here.
+        Running now adds an extra occurrence and leaves the schedule alone — the next fire time is
+        unchanged. Last fired records when a definition ran, not whether it succeeded: fired jobs
+        carry no link back to their definition, so the outcome cannot be shown here.
       </p>
+    </>
+  )
+}
+
+/**
+ * Sending a signal by hand.
+ *
+ * The payload is raw JSON rather than a form, because the workflow definition declares the payload
+ * type and the engine binds on its side of the wire (§11.5) — the dashboard has no schema to render
+ * a form from, and pretending otherwise would be a lie about what it knows.
+ */
+export function Signals() {
+  const [name, setName] = useState('')
+  const [correlationId, setCorrelationId] = useState('')
+  const [payload, setPayload] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+
+  // Validated here so a typo fails before it reaches a workflow, not inside one.
+  let payloadError: string | null = null
+  if (payload.trim().length > 0) {
+    try {
+      JSON.parse(payload)
+    } catch (e: unknown) {
+      payloadError = errorMessage(e)
+    }
+  }
+
+  const ready = name.trim().length > 0 && correlationId.trim().length > 0 && payloadError === null
+
+  async function send() {
+    setBusy(true)
+    setResult(null)
+    setFailure(null)
+    try {
+      await api.sendSignal(name.trim(), correlationId.trim(), payload.trim())
+      setResult('Delivered.')
+    } catch (e: unknown) {
+      setFailure(
+        e instanceof ApiError && e.status === 404
+          ? 'No instance is waiting on that name and correlation id.'
+          : errorMessage(e),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <p className="muted">
+        Delivers a signal to an instance waiting on this name and correlation id. Delivery is
+        at-most-once, so "nothing was waiting" is a normal answer rather than a fault — a signal sent
+        before the instance reaches its wait is simply lost.
+      </p>
+
+      <div className="controls">
+        <div className="field">
+          <label htmlFor="signal-name">Name</label>
+          <input
+            id="signal-name"
+            type="text"
+            placeholder="OrderApproved"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="signal-correlation">Correlation id</label>
+          <input
+            id="signal-correlation"
+            type="text"
+            placeholder="order-42"
+            value={correlationId}
+            onChange={(e) => setCorrelationId(e.target.value)}
+          />
+        </div>
+        <button type="button" disabled={busy || !ready} onClick={send}>
+          Send
+        </button>
+      </div>
+
+      <div className="field">
+        <label htmlFor="signal-payload">Payload (JSON, optional)</label>
+        <textarea
+          id="signal-payload"
+          rows={6}
+          spellCheck={false}
+          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }}
+          value={payload}
+          onChange={(e) => setPayload(e.target.value)}
+        />
+      </div>
+
+      {payloadError && (
+        <div className="notice error">
+          <strong>Payload is not valid JSON.</strong> {payloadError}
+        </div>
+      )}
+      {result && <div className="notice">{result}</div>}
+      {failure && (
+        <div className="notice error">
+          <strong>Not delivered.</strong> {failure}
+        </div>
+      )}
     </>
   )
 }

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Official React UI for the Millrace dashboard: a prebuilt bundle embedded in the package, so consumers never install Node. A client of the versioned REST contract, not a separate feature set.</Description>
+    <Description>Official Angular UI for the Millrace dashboard: a prebuilt bundle embedded in the package, so consumers never install Node. A client of the versioned REST contract, not a separate feature set.</Description>
     <UiRoot>$(MSBuildProjectDirectory)/ui</UiRoot>
     <UiDist>$(UiRoot)/dist</UiDist>
   </PropertyGroup>
@@ -18,16 +18,16 @@
 
   <!--
     Build the bundle before compiling, so the embedded assets always match the sources in this
-    commit. Node is required to build THIS project; consumers of the package never need it, which
-    is the point of shipping a prebuilt bundle. Skip with -p:SkipUiBuild=true when iterating on the
-    C# side.
+    commit. Node is required to build THIS project; consumers of the package never need it, which is
+    the point of shipping a prebuilt bundle. Skip with -p:SkipUiBuild=true when iterating on the C#
+    side.
   -->
-  <Target Name="BuildReactUi" BeforeTargets="BeforeBuild" Condition="'$(SkipUiBuild)' != 'true'">
+  <Target Name="BuildAngularUi" BeforeTargets="BeforeBuild" Condition="'$(SkipUiBuild)' != 'true'">
     <Exec Command="node --version" ContinueOnError="true" StandardOutputImportance="low" StandardErrorImportance="low">
       <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
     </Exec>
     <Error Condition="'$(NodeExitCode)' != '0'"
-           Text="Node.js is required to build $(MSBuildProjectName), which compiles the embedded React bundle. Install Node 20 or later, or pass -p:SkipUiBuild=true to build the C# only (the resulting package will not serve a UI)." />
+           Text="Node.js is required to build $(MSBuildProjectName), which compiles the embedded Angular bundle. Install Node 20 or later, or pass -p:SkipUiBuild=true to build the C# only (the resulting package will not serve a UI)." />
 
     <!-- npm ci needs a lockfile; fall back to install so a fresh clone still builds. -->
     <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(UiRoot)" Condition="Exists('$(UiRoot)/package-lock.json')" />
@@ -40,12 +40,12 @@
     forward slash elsewhere — so the lookup side normalises rather than this side, which avoids an
     MSBuild property function that would not batch per item.
   -->
-  <Target Name="EmbedReactUi" BeforeTargets="PrepareForBuild" DependsOnTargets="BuildReactUi">
+  <Target Name="EmbedAngularUi" BeforeTargets="PrepareForBuild" DependsOnTargets="BuildAngularUi">
     <ItemGroup>
       <!--
         Collected first, then embedded in a second item: referencing %(RecursiveDir) of the item
-        being created in its own metadata does not batch, and every asset collapses onto one
-        logical name.
+        being created in its own metadata does not batch, and every asset collapses onto one logical
+        name.
       -->
       <UiAsset Include="$(UiDist)/**/*.*" />
       <EmbeddedResource Include="@(UiAsset)"
@@ -56,6 +56,7 @@
   <ItemGroup>
     <None Remove="ui/node_modules/**" />
     <None Remove="ui/dist/**" />
+    <None Remove="ui/.angular/**" />
   </ItemGroup>
 
 </Project>

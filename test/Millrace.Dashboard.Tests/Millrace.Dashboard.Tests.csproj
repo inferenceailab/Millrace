@@ -9,6 +9,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\Millrace.Dashboard\Millrace.Dashboard.csproj" />
     <ProjectReference Include="..\..\src\Millrace.Dashboard.Ui.React\Millrace.Dashboard.Ui.React.csproj" />
+    <!-- Both UI packages, so the parity check can compare their bundles against the contract. -->
+    <ProjectReference Include="..\..\src\Millrace.Dashboard.Ui.Angular\Millrace.Dashboard.Ui.Angular.csproj" />
     <!-- DI and Hosting arrive with the Microsoft.AspNetCore.App framework reference above. -->
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

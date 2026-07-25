@@ -47,27 +47,9 @@ export function StateChip({ state }: { state: string }) {
   )
 }
 
-export function formatTime(value: string | null | undefined): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? '—' : date.toISOString().replace('T', ' ').slice(0, 19) + 'Z'
-}
-
-export function relativeToNow(value: string): string {
-  const delta = new Date(value).getTime() - Date.now()
-  const abs = Math.abs(delta)
-  const minute = 60_000
-  const hour = 3_600_000
-  const day = 86_400_000
-
-  let text: string
-  if (abs < minute) text = `${Math.round(abs / 1000)}s`
-  else if (abs < hour) text = `${Math.round(abs / minute)}m`
-  else if (abs < day) text = `${Math.round(abs / hour)}h`
-  else text = `${Math.round(abs / day)}d`
-
-  return delta >= 0 ? `in ${text}` : `${text} ago`
-}
+// Formatting is framework-free and shared with the Angular UI, so the two dashboards never render
+// the same instant differently.
+export { dueText, errorMessage, formatTime, isOverdue, relativeToNow } from '../../../ui-shared/format'
 
 export function Loading() {
   return <p className="muted">Loading…</p>

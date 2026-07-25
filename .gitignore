@@ -481,7 +481,9 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# Millrace: the dashboard UI bundle is generated during the .NET build (see
-# Millrace.Dashboard.Ui.React.csproj) and embedded from there. Committing it would let the
-# shipped bundle drift from the sources in the same commit.
+# Millrace: the dashboard UI bundles are generated during the .NET build (see each
+# Millrace.Dashboard.Ui.*.csproj) and embedded from there. Committing one would let the shipped
+# bundle drift from the sources in the same commit.
 src/Millrace.Dashboard.Ui.React/ui/dist/
+src/Millrace.Dashboard.Ui.Angular/ui/dist/
+src/Millrace.Dashboard.Ui.Angular/ui/.angular/
