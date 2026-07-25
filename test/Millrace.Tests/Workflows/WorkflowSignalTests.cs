@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Millrace.Storage;
+using Millrace.Storage.Monitoring;
 using Millrace.Workflows;
 using Xunit;
 
@@ -261,8 +262,18 @@ public sealed class WorkflowSignalTests
 
         // Now let the timeout come due. It must find the bookmark already consumed and do nothing —
         // the flow must not advance a second time.
+        //
+        // This is the inverse of the usual wait: there is no event to poll for, because the correct
+        // behaviour is that nothing happens. Sleeping alone would make the test pass whether the
+        // timeout ran or not, so it waits for the timeout *job* to finish and only then asserts the
+        // flow is unchanged — otherwise a timeout that never fired would look like a timeout that
+        // fired harmlessly (#87).
         time.Advance(TimeSpan.FromSeconds(3));
-        await Task.Delay(300);
+        var monitoring = host.Services.GetRequiredService<IMonitoringStorage>();
+        await Eventually.ObservedAsync(
+            async () => await monitoring.QueryJobsAsync(new JobQuery(), CancellationToken.None),
+            page => page.Items.All(j => j.State.IsTerminal()),
+            "the timeout job to run and settle");
 
         var data = await client.GetDataAsync<Approval>(id);
         var instance = await host.Services.GetRequiredService<IWorkflowStorage>()
