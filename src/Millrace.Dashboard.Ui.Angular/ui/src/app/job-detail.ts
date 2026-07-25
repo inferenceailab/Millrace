@@ -82,6 +82,50 @@ import { asyncSignal, Chip, ErrorNotice, errorMessage, formatTime, Loading } fro
       <h2>Arguments</h2>
       <pre>{{ argumentsText() }}</pre>
 
+      @if (data.attempts.length > 0) {
+        <h2>Attempts</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="num">#</th>
+                <th>Outcome</th>
+                <th>Ended</th>
+                <th>Worker</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of data.attempts; track a.attempt) {
+                <tr>
+                  <td class="num">{{ a.attempt }}</td>
+                  <td>
+                    <mr-chip [state]="a.outcome === 'Failed' ? 'Failed' : 'Cancelled'" />
+                    @if (a.outcome === 'Interrupted') {
+                      <span> interrupted</span>
+                    }
+                  </td>
+                  <td>{{ time(a.recordedAt) }}</td>
+                  <td class="mono">{{ a.workerId ?? '—' }}</td>
+                  <td>
+                    @if (a.error; as error) {
+                      <pre>{{ error }}</pre>
+                    } @else {
+                      <span class="muted">no verdict recorded</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin-top: 12px">
+          Only failed and interrupted executions are listed — a successful attempt records nothing,
+          so a job that worked first time shows none. Bounded per job, while the counts above are
+          exact.
+        </p>
+      }
+
       @if (data.lastError; as lastError) {
         <h2>Last error</h2>
         <pre>{{ lastError }}</pre>

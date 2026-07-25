@@ -324,6 +324,50 @@ export function JobDetail({ id }: { id: string }) {
               .join('\n\n')}
       </pre>
 
+      {data.attempts.length > 0 && (
+        <>
+          <h2>Attempts</h2>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th className="num">#</th>
+                  <th>Outcome</th>
+                  <th>Ended</th>
+                  <th>Worker</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.attempts.map((a) => (
+                  <tr key={a.attempt}>
+                    <td className="num">{a.attempt}</td>
+                    <td>
+                      <StateChip state={a.outcome === 'Failed' ? 'Failed' : 'Cancelled'} />
+                      {a.outcome === 'Interrupted' && ' interrupted'}
+                    </td>
+                    <td>{formatTime(a.recordedAt)}</td>
+                    <td className="mono">{a.workerId ?? '—'}</td>
+                    <td>
+                      {a.error ? (
+                        <pre>{a.error}</pre>
+                      ) : (
+                        <span className="muted">no verdict recorded</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ marginTop: 12 }}>
+            Only failed and interrupted executions are listed — a successful attempt records nothing,
+            so a job that worked first time shows none. Bounded per job, while the counts above are
+            exact.
+          </p>
+        </>
+      )}
+
       {data.lastError && (
         <>
           <h2>Last error</h2>

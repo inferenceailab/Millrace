@@ -393,6 +393,150 @@ public abstract class MonitoringConformanceSuite
     }
 
     [Fact]
+    public async Task A_job_that_succeeds_first_time_records_no_attempt_history()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var job = Job(time);
+        await harness.Jobs.EnqueueAsync([job], CancellationToken.None);
+
+        var claimed = await ClaimAllAsync(harness);
+        await FinishAsync(harness, claimed.Single(), JobState.Succeeded);
+
+        var details = await harness.Monitoring.GetJobDetailsAsync(job.Id, CancellationToken.None);
+
+        // The point of the design: the common path writes nothing, so a healthy queue pays nothing
+        // for the timeline. Empty means "nothing went wrong", not "no history kept" (§11.27).
+        Assert.Empty(details!.Attempts);
+    }
+
+    [Fact]
+    public async Task A_failed_attempt_is_recorded_with_its_error_and_worker()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var job = Job(time);
+        await harness.Jobs.EnqueueAsync([job], CancellationToken.None);
+
+        var claimed = await ClaimAllAsync(harness);
+        await harness.Jobs.ApplyAsync(
+            new JobTransition
+            {
+                JobId = job.Id,
+                ExpectedWorkerId = ConformanceWorker,
+                ExpectedAttempt = claimed[0].Attempt,
+                TargetState = JobState.Failed,
+                Failures = 1,
+                Error = "boom",
+                DueAt = time.GetUtcNow().AddMinutes(1),
+            },
+            CancellationToken.None);
+
+        var attempt = Assert.Single(
+            (await harness.Monitoring.GetJobDetailsAsync(job.Id, CancellationToken.None))!.Attempts);
+
+        Assert.Equal(JobAttemptOutcome.Failed, attempt.Outcome);
+        Assert.Equal(1, attempt.Attempt);
+        Assert.Equal("boom", attempt.Error);
+        Assert.Equal(ConformanceWorker, attempt.WorkerId);
+    }
+
+    [Fact]
+    public async Task An_expired_lease_records_an_interruption_rather_than_a_failure()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var job = Job(time);
+        await harness.Jobs.EnqueueAsync([job], CancellationToken.None);
+
+        await ClaimAllAsync(harness);
+        time.Advance(TimeSpan.FromMinutes(10));
+        await ClaimAllAsync(harness);
+
+        var details = await harness.Monitoring.GetJobDetailsAsync(job.Id, CancellationToken.None);
+        var attempt = Assert.Single(details!.Attempts);
+
+        // An execution that vanished had nothing to report, and that absence is the diagnosis — so
+        // no error, and no retry budget consumed (§11.8).
+        Assert.Equal(JobAttemptOutcome.Interrupted, attempt.Outcome);
+        Assert.Null(attempt.Error);
+        Assert.Equal(0, details.Summary.Failures);
+
+        // One attempt has ended; a second is in flight. The timeline holds only the ended one, while
+        // the derived counter counts both — it is arithmetic over two counters and cannot see a live
+        // lease. That gap is the reason the timeline exists, so it is asserted rather than smoothed.
+        Assert.Single(details.Attempts);
+        Assert.Equal(2, details.Summary.Interruptions);
+    }
+
+    [Fact]
+    public async Task A_fenced_release_records_an_interruption()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var job = Job(time);
+        await harness.Jobs.EnqueueAsync([job], CancellationToken.None);
+
+        var claimed = await ClaimAllAsync(harness);
+        await harness.Jobs.ApplyAsync(
+            new JobTransition
+            {
+                JobId = job.Id,
+                ExpectedWorkerId = ConformanceWorker,
+                ExpectedAttempt = claimed[0].Attempt,
+                TargetState = JobState.Enqueued,
+                Failures = claimed[0].Failures,
+            },
+            CancellationToken.None);
+
+        // A graceful shutdown hands work back. Recording it is what makes a rolling deploy legible
+        // in the timeline instead of looking like silence.
+        var attempt = Assert.Single(
+            (await harness.Monitoring.GetJobDetailsAsync(job.Id, CancellationToken.None))!.Attempts);
+
+        Assert.Equal(JobAttemptOutcome.Interrupted, attempt.Outcome);
+    }
+
+    [Fact]
+    public async Task Attempt_history_is_newest_first_and_capped_without_distorting_the_counters()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var job = Job(time) with { Retry = Retry.Fixed(TimeSpan.Zero, maxAttempts: 100) };
+        await harness.Jobs.EnqueueAsync([job], CancellationToken.None);
+
+        for (var i = 1; i <= 15; i++)
+        {
+            var claimed = await ClaimAllAsync(harness);
+            await harness.Jobs.ApplyAsync(
+                new JobTransition
+                {
+                    JobId = job.Id,
+                    ExpectedWorkerId = ConformanceWorker,
+                    ExpectedAttempt = claimed.Single().Attempt,
+                    TargetState = JobState.Failed,
+                    Failures = i,
+                    Error = $"failure {i}",
+                    DueAt = time.GetUtcNow(),
+                },
+                CancellationToken.None);
+
+            time.Advance(TimeSpan.FromSeconds(1));
+            await harness.Jobs.ActivateDueJobsAsync(time.GetUtcNow(), 10, CancellationToken.None);
+        }
+
+        var details = await harness.Monitoring.GetJobDetailsAsync(job.Id, CancellationToken.None);
+
+        // Bounded, so one pathological job cannot grow without limit...
+        Assert.True(details!.Attempts.Count <= 10, $"kept {details.Attempts.Count} attempts");
+        Assert.Equal("failure 15", details.Attempts[0].Error);
+
+        // ...but the counters live on the job row and are never pruned, so a truncated timeline can
+        // never understate how often something failed.
+        Assert.Equal(15, details.Summary.Failures);
+    }
+
+    [Fact]
     public async Task A_definition_that_has_never_fired_reports_no_last_outcome()
     {
         var time = NewTime();

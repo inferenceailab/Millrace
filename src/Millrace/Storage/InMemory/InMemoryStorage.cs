@@ -71,6 +71,24 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
 
             foreach (var entry in eligible.ToList())
             {
+                // Reclaiming a job that is still Processing means its previous attempt ended without
+                // ever reporting a verdict — the lease simply expired. That is the only moment an
+                // interruption becomes observable, so it is recorded here rather than at transition
+                // time, where nothing arrives to record (§11.27).
+                if (entry.Record.State == JobState.Processing)
+                {
+                    RecordAttempt(
+                        entry,
+                        new JobAttempt
+                        {
+                            Attempt = entry.Record.Attempt,
+                            Outcome = JobAttemptOutcome.Interrupted,
+                            RecordedAt = now,
+                            WorkerId = entry.Record.WorkerId,
+                        },
+                        JobAttemptRules.HistoryLimit);
+                }
+
                 entry.Record = entry.Record with
                 {
                     State = JobState.Processing,
@@ -554,14 +572,22 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         var previous = entry.Record;
         var hadKey = ActiveKeyScope(previous) is { } scope && _activeKeys.TryGetValue(scope, out var h)
             && h == previous.Id;
+        // Snapshotted, not counted: pruning can remove from the front, so restoring by length would
+        // silently drop history. A rolled-back transition must leave no trace of an attempt that,
+        // as far as the contract is concerned, never ended.
+        var attemptsBefore = entry.Attempts.ToList();
         undo.Add(() =>
         {
             entry.Record = previous;
+            entry.Attempts.Clear();
+            entry.Attempts.AddRange(attemptsBefore);
             if (hadKey)
             {
                 _activeKeys[ActiveKeyScope(previous)!.Value] = previous.Id;
             }
         });
+
+        RecordAttemptFor(entry, previous, transition);
 
         entry.Record = transition.TargetState switch
         {
@@ -722,6 +748,64 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         public required JobRecord Record { get; set; }
 
         public required long Sequence { get; init; }
+
+        /// <summary>Failed and interrupted executions, oldest first, capped (§11.27).</summary>
+        public List<JobAttempt> Attempts { get; } = [];
+    }
+
+    /// <summary>
+    /// Records the attempt a transition ends, when it ended in something worth explaining.
+    /// </summary>
+    /// <remarks>
+    /// Three transitions end an attempt without success: a recorded failure (retrying), a
+    /// dead-letter, and a fenced release back to the queue on graceful shutdown. The release is an
+    /// interruption rather than a failure — it consumes no retry budget (§11.8) — and recording it
+    /// is what makes a rolling deploy legible in the timeline instead of looking like silence.
+    /// Success and cancellation record nothing: the job row already describes both.
+    /// </remarks>
+    private void RecordAttemptFor(JobEntry entry, JobRecord previous, JobTransition transition)
+    {
+        var outcome = transition.TargetState switch
+        {
+            JobState.Failed => JobAttemptOutcome.Failed,
+            JobState.Dead when transition.Failures > previous.Failures => JobAttemptOutcome.Failed,
+            JobState.Enqueued => JobAttemptOutcome.Interrupted,
+            _ => (JobAttemptOutcome?)null,
+        };
+
+        if (outcome is not { } value)
+        {
+            return;
+        }
+
+        RecordAttempt(
+            entry,
+            new JobAttempt
+            {
+                Attempt = previous.Attempt,
+                Outcome = value,
+                RecordedAt = _time.GetUtcNow(),
+                WorkerId = previous.WorkerId,
+                Error = value == JobAttemptOutcome.Failed ? transition.Error : null,
+            },
+            JobAttemptRules.HistoryLimit);
+    }
+
+    /// <summary>
+    /// Records an unsuccessful attempt and prunes the oldest beyond the cap.
+    /// </summary>
+    /// <remarks>
+    /// Called from inside the lock, so it is part of the same atomic step as the transition or claim
+    /// that caused it — a timeline that can disagree with the counters it explains would be worse
+    /// than none.
+    /// </remarks>
+    private static void RecordAttempt(JobEntry entry, JobAttempt attempt, int cap)
+    {
+        entry.Attempts.Add(attempt);
+        if (entry.Attempts.Count > cap)
+        {
+            entry.Attempts.RemoveRange(0, entry.Attempts.Count - cap);
+        }
     }
 
     private sealed record Listener(Channel<QueueSignal> Channel, IReadOnlySet<string> Queues);

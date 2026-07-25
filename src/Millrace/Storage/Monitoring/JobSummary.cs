@@ -51,10 +51,24 @@ public sealed record JobSummary
     /// lost leases.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Derived from the §11.8 attempt/failure split rather than stored. A job with a high
     /// interruption count and no failures is being killed by infrastructure, not by its own code —
-    /// a distinction an operator otherwise has to infer from logs. Note this is a count, not a
-    /// timeline: per-attempt history is not persisted by the 0.1 schema.
+    /// a distinction an operator otherwise has to infer from logs.
+    /// </para>
+    /// <para>
+    /// <b>It counts the attempt in flight.</b> A job claimed and still running reports one
+    /// interruption it has not had yet, because this is arithmetic over two counters and cannot
+    /// tell a live lease from an expired one without a clock. Distinguishing them needs
+    /// <see cref="JobRecord.LeaseUntil"/> and the current time, which a derived property does not
+    /// have — and pushing that into every provider would trade a documented approximation for three
+    /// chances to disagree.
+    /// </para>
+    /// <para>
+    /// So this stays the cheap summary — <em>is this job failing, or is infrastructure killing
+    /// it</em> — and <see cref="JobDetails.Attempts"/> is the exact answer, holding a row only for
+    /// executions that actually ended (§11.27).
+    /// </para>
     /// </remarks>
     public int Interruptions => Attempt - Failures;
 

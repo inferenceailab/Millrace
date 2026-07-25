@@ -100,6 +100,22 @@ export interface JobInvocation {
   argumentsJson: (string | null)[]
 }
 
+export type JobAttemptOutcome = 'Failed' | 'Interrupted'
+
+/**
+ * One execution that did not succeed. Successful attempts are deliberately not recorded, so an
+ * empty list means "nothing has gone wrong", not "no history kept".
+ */
+export interface JobAttempt {
+  attempt: number
+  outcome: JobAttemptOutcome
+  /** When the attempt ended. Start times are not stored. */
+  recordedAt: string
+  workerId: string | null
+  /** Always null for an interruption — an execution that vanished had nothing to report. */
+  error: string | null
+}
+
 export interface JobDetails {
   summary: JobSummary
   invocation: JobInvocation
@@ -111,6 +127,8 @@ export interface JobDetails {
   cancelRequested: boolean
   workflowInstanceId: string | null
   activityNodeId: string | null
+  /** Failed and interrupted executions, newest first. Bounded per job. */
+  attempts: JobAttempt[]
 }
 
 export interface RecurringSummary {
