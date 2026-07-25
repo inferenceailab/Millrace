@@ -51,7 +51,7 @@ public static class MonitoringCursor
         }
 
         Span<byte> payload = stackalloc byte[PayloadLength];
-        if (!Base64Url.TryDecodeFromChars(cursor, payload, out var written) || written != PayloadLength)
+        if (!TryDecodeBase64Url(cursor, payload, out var written) || written != PayloadLength)
         {
             return false;
         }
@@ -65,6 +65,93 @@ public static class MonitoringCursor
         createdAt = new DateTimeOffset(ticks, TimeSpan.Zero);
         id = new Guid(payload[8..], bigEndian: true);
         return true;
+    }
+
+    /// <summary>
+    /// Encodes an ordering key whose tiebreak is a consumer-chosen string rather than an id.
+    /// </summary>
+    /// <remarks>
+    /// Recurring definitions are keyed by a caller-supplied string, so the <see cref="Guid"/> form
+    /// above does not fit them. The timestamp stays fixed-width and leading, keeping the encoding
+    /// order-preserving; the id follows as UTF-8.
+    /// </remarks>
+    public static string Encode(DateTimeOffset timestamp, string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+
+        var idBytes = System.Text.Encoding.UTF8.GetBytes(id);
+        var payload = new byte[8 + idBytes.Length];
+        BinaryPrimitives.WriteInt64BigEndian(payload, timestamp.UtcTicks);
+        idBytes.CopyTo(payload, 8);
+        return Base64Url.EncodeToString(payload);
+    }
+
+    /// <summary>
+    /// Decodes a cursor produced by <see cref="Encode(DateTimeOffset, string)"/>.
+    /// </summary>
+    /// <remarks>
+    /// Named distinctly rather than overloading <see cref="TryDecode(string?, out DateTimeOffset, out Guid)"/>:
+    /// two overloads differing only in an <c>out</c> type are ambiguous at any call site using
+    /// <c>out var</c>, which is how most callers would write it.
+    /// </remarks>
+    public static bool TryDecodeStringId(string? cursor, out DateTimeOffset timestamp, out string id)
+    {
+        timestamp = default;
+        id = string.Empty;
+
+        if (string.IsNullOrEmpty(cursor))
+        {
+            return false;
+        }
+
+        byte[] payload;
+        int written;
+        try
+        {
+            payload = new byte[Base64Url.GetMaxDecodedLength(cursor.Length)];
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+
+        if (!TryDecodeBase64Url(cursor, payload, out written) || written < 8)
+        {
+            return false;
+        }
+
+        var ticks = BinaryPrimitives.ReadInt64BigEndian(payload);
+        if (ticks < 0 || ticks > DateTimeOffset.MaxValue.UtcTicks)
+        {
+            return false;
+        }
+
+        timestamp = new DateTimeOffset(ticks, TimeSpan.Zero);
+        id = System.Text.Encoding.UTF8.GetString(payload, 8, written - 8);
+        return true;
+    }
+
+    /// <summary>
+    /// Decodes base64url, treating malformed input as a failure rather than an exception.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Base64Url.TryDecodeFromChars(ReadOnlySpan{char}, Span{byte}, out int)"/> returns
+    /// false for a well-formed string of the wrong length but <em>throws</em>
+    /// <see cref="FormatException"/> when the input contains a non-base64url character. Cursors
+    /// arrive from HTTP clients, so an arbitrary query-string value must produce a rejected cursor —
+    /// the contract's <c>MillraceStorageException</c> — not an unhandled exception and a 500.
+    /// </remarks>
+    private static bool TryDecodeBase64Url(ReadOnlySpan<char> source, Span<byte> destination, out int written)
+    {
+        try
+        {
+            return Base64Url.TryDecodeFromChars(source, destination, out written);
+        }
+        catch (FormatException)
+        {
+            written = 0;
+            return false;
+        }
     }
 
     /// <summary>

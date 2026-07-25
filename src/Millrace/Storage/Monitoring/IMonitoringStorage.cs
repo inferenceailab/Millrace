@@ -64,6 +64,17 @@ public interface IMonitoringStorage
     ValueTask<Page<WorkflowInstanceSummary>> QueryInstancesAsync(InstanceQuery query, CancellationToken ct);
 
     /// <summary>
+    /// One page of recurring definitions matching <paramref name="query"/>, ordered
+    /// <c>NextFireTime ASC, Id ASC</c>.
+    /// </summary>
+    /// <remarks>
+    /// The one query ordered forwards in time: a schedule view asks what runs next, where the job
+    /// and instance lists ask what just happened. Same cursor, clamping and tenancy rules otherwise.
+    /// </remarks>
+    /// <exception cref="MillraceStorageException">The cursor was not issued by this provider.</exception>
+    ValueTask<Page<RecurringSummary>> QueryRecurringAsync(RecurringQuery query, CancellationToken ct);
+
+    /// <summary>
     /// Full detail for one job, or <see langword="null"/> if no such job exists.
     /// </summary>
     /// <remarks>

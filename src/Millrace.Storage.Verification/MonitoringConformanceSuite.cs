@@ -150,17 +150,26 @@ public abstract class MonitoringConformanceSuite
         Assert.Equal(seeded.AsEnumerable().Reverse().Select(j => j.Id).ToList(), seen);
     }
 
-    [Fact]
-    public async Task An_undecodable_cursor_is_rejected_rather_than_restarting()
+    [Theory]
+    // Well-formed base64url of the wrong length, a string containing characters outside the
+    // base64url alphabet, and one long enough to stress the length maths. Cursors arrive straight
+    // from a query string, so every one of these must be a rejected cursor rather than an
+    // unhandled exception — and silently restarting would turn a client bug into an infinite
+    // paging loop.
+    [InlineData("not-a-cursor")]
+    [InlineData("!!not-a-cursor!!")]
+    [InlineData("%%%")]
+    [InlineData(" ")]
+    [InlineData("a")]
+    public async Task An_undecodable_cursor_is_rejected_rather_than_restarting(string cursor)
     {
         var time = NewTime();
         await using var harness = await CreateHarnessAsync(time);
         await SeedAsync(harness, time, 2);
 
-        // Silently restarting would turn a client bug into an infinite paging loop.
         await Assert.ThrowsAsync<MillraceStorageException>(async () =>
             await harness.Monitoring.QueryJobsAsync(
-                new JobQuery { Cursor = "not-a-cursor" }, CancellationToken.None));
+                new JobQuery { Cursor = cursor }, CancellationToken.None));
     }
 
     [Fact]
@@ -363,19 +372,151 @@ public abstract class MonitoringConformanceSuite
 
         Assert.Equal(2, stats.RecurringDefinitions);
         Assert.Equal(1, stats.OverdueRecurringDefinitions);
-
-        RecurringJobRecord Recurring(string id, DateTimeOffset next, TimeProvider clock) => new()
-        {
-            Id = id,
-            Cron = "* * * * *",
-            Queue = "default",
-            Invocation = Job(clock).Invocation,
-            Retry = Retry.None,
-            NextFireTime = next,
-            CreatedAt = clock.GetUtcNow(),
-            UpdatedAt = clock.GetUtcNow(),
-        };
     }
+
+    [Fact]
+    public async Task Recurring_definitions_are_ordered_soonest_first()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var now = time.GetUtcNow();
+
+        await harness.Jobs.UpsertRecurringAsync(Recurring("c", now.AddHours(3), time), CancellationToken.None);
+        await harness.Jobs.UpsertRecurringAsync(Recurring("a", now.AddHours(1), time), CancellationToken.None);
+        await harness.Jobs.UpsertRecurringAsync(Recurring("b", now.AddHours(2), time), CancellationToken.None);
+
+        var page = await harness.Monitoring.QueryRecurringAsync(new RecurringQuery(), CancellationToken.None);
+
+        // Ascending — the opposite of the job and instance lists, because a schedule view is read
+        // forwards in time.
+        Assert.Equal(["a", "b", "c"], page.Items.Select(r => r.Id).ToList());
+    }
+
+    [Fact]
+    public async Task Recurring_paging_walks_every_definition_exactly_once()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var now = time.GetUtcNow();
+        for (var i = 0; i < 7; i++)
+        {
+            await harness.Jobs.UpsertRecurringAsync(
+                Recurring($"def-{i}", now.AddMinutes(i), time), CancellationToken.None);
+        }
+
+        var seen = new List<string>();
+        string? cursor = null;
+        do
+        {
+            var page = await harness.Monitoring.QueryRecurringAsync(
+                new RecurringQuery { Limit = 2, Cursor = cursor }, CancellationToken.None);
+            seen.AddRange(page.Items.Select(r => r.Id));
+            cursor = page.NextCursor;
+        }
+        while (cursor is not null);
+
+        Assert.Equal(7, seen.Count);
+        Assert.Equal(seen.Count, seen.Distinct().Count());
+        Assert.Equal(Enumerable.Range(0, 7).Select(i => $"def-{i}"), seen);
+    }
+
+    [Fact]
+    public async Task Recurring_ties_on_fire_time_break_by_id()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var same = time.GetUtcNow().AddHours(1);
+
+        // Identical fire times are ordinary here: a cron like "0 * * * *" gives every definition
+        // the same next occurrence, so the id tiebreak carries the ordering.
+        foreach (var id in new[] { "zebra", "alpha", "mango" })
+        {
+            await harness.Jobs.UpsertRecurringAsync(Recurring(id, same, time), CancellationToken.None);
+        }
+
+        var page = await harness.Monitoring.QueryRecurringAsync(new RecurringQuery(), CancellationToken.None);
+
+        Assert.Equal(["alpha", "mango", "zebra"], page.Items.Select(r => r.Id).ToList());
+    }
+
+    [Fact]
+    public async Task Recurring_filters_by_queue_and_tenant_and_clamps_the_limit()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var now = time.GetUtcNow();
+
+        await harness.Jobs.UpsertRecurringAsync(Recurring("a", now.AddMinutes(1), time, queue: "reports"), CancellationToken.None);
+        await harness.Jobs.UpsertRecurringAsync(Recurring("b", now.AddMinutes(2), time, queue: "default"), CancellationToken.None);
+        await harness.Jobs.UpsertRecurringAsync(Recurring("c", now.AddMinutes(3), time, tenantId: "acme"), CancellationToken.None);
+
+        var reports = await harness.Monitoring.QueryRecurringAsync(
+            new RecurringQuery { Queue = "reports" }, CancellationToken.None);
+        var acme = await harness.Monitoring.QueryRecurringAsync(
+            new RecurringQuery { Tenant = TenantFilter.For("acme") }, CancellationToken.None);
+        var untenanted = await harness.Monitoring.QueryRecurringAsync(
+            new RecurringQuery { Tenant = TenantFilter.Untenanted }, CancellationToken.None);
+        var clamped = await harness.Monitoring.QueryRecurringAsync(
+            new RecurringQuery { Limit = 0 }, CancellationToken.None);
+
+        Assert.Equal("a", Assert.Single(reports.Items).Id);
+        Assert.Equal("c", Assert.Single(acme.Items).Id);
+        Assert.Equal(["a", "b"], untenanted.Items.Select(r => r.Id).ToList());
+        Assert.Equal(3, clamped.Items.Count);
+    }
+
+    [Theory]
+    [InlineData("not-a-cursor")]
+    [InlineData("!!not-a-cursor!!")]
+    [InlineData("%%%")]
+    [InlineData(" ")]
+    public async Task Recurring_rejects_an_undecodable_cursor(string cursor)
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+
+        await Assert.ThrowsAsync<MillraceStorageException>(async () =>
+            await harness.Monitoring.QueryRecurringAsync(
+                new RecurringQuery { Cursor = cursor }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Recurring_summary_carries_schedule_fields_and_no_outcome()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        var next = time.GetUtcNow().AddHours(1);
+        await harness.Jobs.UpsertRecurringAsync(Recurring("nightly", next, time), CancellationToken.None);
+
+        var summary = Assert.Single(
+            (await harness.Monitoring.QueryRecurringAsync(new RecurringQuery(), CancellationToken.None)).Items);
+
+        Assert.Equal("nightly", summary.Id);
+        Assert.Equal("* * * * *", summary.Cron);
+        Assert.Equal(next, summary.NextFireTime);
+        // Never fired yet, and there is no outcome field to populate even after it does.
+        Assert.Null(summary.LastFireTime);
+    }
+
+    private static RecurringJobRecord Recurring(
+        string id, DateTimeOffset next, TimeProvider clock, string queue = "default", string? tenantId = null) => new()
+    {
+        Id = id,
+        Cron = "* * * * *",
+        Queue = queue,
+        Invocation = new JobInvocation
+        {
+            TypeName = "Sample.IService, Sample",
+            MethodName = "RunAsync",
+            ParameterTypes = [],
+            ArgumentsJson = [],
+        },
+        Retry = Retry.None,
+        TenantId = tenantId,
+        NextFireTime = next,
+        CreatedAt = clock.GetUtcNow(),
+        UpdatedAt = clock.GetUtcNow(),
+    };
 
     [Fact]
     public async Task Instance_queries_page_and_filter_like_job_queries()
