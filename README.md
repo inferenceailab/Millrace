@@ -29,6 +29,17 @@ Planned work lives on the [project board](https://github.com/users/inferenceaila
 mirrored in [docs/backlog.md](docs/backlog.md). Unsettled design questions are tracked in
 [docs/open-questions.md](docs/open-questions.md).
 
+## Try it
+
+```bash
+dotnet run --project samples/Millrace.Sample.Api
+```
+
+Then open <http://localhost:5000>. No database, no broker, no sidecar — the bundled in-memory
+provider carries jobs, a workflow and the dashboard in one process. Add one connection string to
+run the same sample on PostgreSQL and watch jobs survive a restart. See
+[samples/README.md](samples/README.md).
+
 ## Repository layout
 
 ```

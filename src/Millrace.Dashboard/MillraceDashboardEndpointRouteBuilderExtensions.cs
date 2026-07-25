@@ -1,15 +1,15 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Millrace.Dashboard;
 using Millrace.Dashboard.Endpoints;
 using Millrace.Storage;
 using Millrace.Storage.Monitoring;
 
-namespace Millrace.Dashboard;
+namespace Microsoft.AspNetCore.Builder;
 
 /// <summary>
 /// Mounts the dashboard API: <c>app.MapMillraceDashboard("/millrace")</c>.

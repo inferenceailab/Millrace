@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- A sample is meant to be read, and its README explains itself. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Millrace\Millrace.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Storage.PostgreSql\Millrace.Storage.PostgreSql.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Dashboard\Millrace.Dashboard.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Dashboard.Ui.React\Millrace.Dashboard.Ui.React.csproj" />
+  </ItemGroup>
+
+</Project>

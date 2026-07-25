@@ -1,0 +1,21 @@
+# PostgreSQL for the sample. Optional: with nothing running, the sample uses the bundled in-memory
+# provider and needs no setup at all. Start this to watch jobs survive a restart.
+#
+#   docker compose up -d
+#   MILLRACE_POSTGRES="Host=localhost;Port=5433;Database=millrace;Username=millrace;Password=millrace" \
+#     dotnet run --project Millrace.Sample.Api
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: millrace
+      POSTGRES_USER: millrace
+      POSTGRES_PASSWORD: millrace
+    ports:
+      # 5433 so a PostgreSQL you already run on 5432 is left alone.
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U millrace"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
