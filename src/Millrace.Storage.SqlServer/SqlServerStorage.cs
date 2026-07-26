@@ -43,6 +43,14 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
     private readonly SemaphoreSlim _initGate = new(1, 1);
     private volatile bool _initialized;
 
+    /// <summary>Creates the provider over a connection string.</summary>
+    /// <remarks>
+    /// A connection string rather than a data source object, because
+    /// <c>Microsoft.Data.SqlClient</c> has no equivalent of Npgsql's <c>NpgsqlDataSource</c> for
+    /// this to mirror. <paramref name="time"/> defaults to <see cref="TimeProvider.System"/> and
+    /// every <c>now</c> comparison goes through it, never database time.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="connectionString"/> is empty.</exception>
     public SqlServerStorage(
         string connectionString, TimeProvider? time = null, SqlServerStorageOptions? options = null)
     {
@@ -59,6 +67,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
     // ---------------------------------------------------------------- schema
 
+    /// <summary>Creates the schema and tables (idempotent). Called lazily unless disabled.</summary>
     public async ValueTask InitializeAsync(CancellationToken ct)
     {
         await using var conn = await OpenAsync(ct).ConfigureAwait(false);
@@ -222,6 +231,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
     // ---------------------------------------------------------------- IJobStorage
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<JobId>> EnqueueAsync(IReadOnlyList<JobRecord> jobs, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -359,6 +369,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return result is Guid id ? new JobId(id) : null;
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<JobRecord>> ClaimAsync(ClaimRequest request, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -429,6 +440,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return claimed;
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<JobId>> RenewLeasesAsync(
         string workerId, IReadOnlyList<JobId> jobs, TimeSpan lease, CancellationToken ct)
     {
@@ -473,6 +485,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return renewed;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> ApplyAsync(JobTransition transition, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -612,6 +625,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -630,6 +644,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false) > 0;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -684,6 +699,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return true;
     }
 
+    /// <inheritdoc />
     public async ValueTask<JobRecord?> GetJobAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -695,6 +711,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return await reader.ReadAsync(ct).ConfigureAwait(false) ? ReadJob(reader) : null;
     }
 
+    /// <inheritdoc />
     public async ValueTask<int> ActivateDueJobsAsync(DateTimeOffset now, int batchSize, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -717,6 +734,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
     // ---------------------------------------------------------------- recurring
 
+    /// <inheritdoc />
     public async ValueTask UpsertRecurringAsync(RecurringJobRecord record, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -753,6 +771,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<RecurringJobRecord?> GetRecurringAsync(string id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -764,6 +783,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return await reader.ReadAsync(ct).ConfigureAwait(false) ? ReadRecurring(reader) : null;
     }
 
+    /// <inheritdoc />
     public async ValueTask RemoveRecurringAsync(string id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -773,6 +793,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<RecurringJobRecord>> GetDueRecurringAsync(
         DateTimeOffset now, int batchSize, CancellationToken ct)
     {
@@ -795,6 +816,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return due;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> TryFireRecurringAsync(
         string id, DateTimeOffset expectedFireTime, DateTimeOffset nextFireTime,
         JobRecord job, CancellationToken ct)
@@ -827,6 +849,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
     // ---------------------------------------------------------------- IWorkflowStorage
 
+    /// <inheritdoc />
     public async ValueTask CreateInstanceAsync(WorkflowInstanceRecord instance, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -860,6 +883,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask<WorkflowInstanceRecord?> GetInstanceAsync(
         WorkflowInstanceId id, CancellationToken ct)
     {
@@ -877,6 +901,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return await reader.ReadAsync(ct).ConfigureAwait(false) ? ReadInstance(reader) : null;
     }
 
+    /// <inheritdoc />
     public async ValueTask UpdateInstanceAsync(
         WorkflowInstanceRecord instance, long expectedRevision, CancellationToken ct)
     {
@@ -917,6 +942,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask AddBookmarkAsync(BookmarkRecord bookmark, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -943,6 +969,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<BookmarkRecord?> ConsumeBookmarkAsync(
         string signalName, string correlationId, CancellationToken ct)
     {
@@ -1068,6 +1095,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
 
     // ---------------------------------------------------------------- IMonitoringStorage
 
+    /// <inheritdoc />
     public async ValueTask<JobStatistics> GetStatisticsAsync(TenantFilter tenant, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -1132,6 +1160,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         };
     }
 
+    /// <inheritdoc />
     public async ValueTask<Page<JobSummary>> QueryJobsAsync(JobQuery query, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -1198,6 +1227,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return BuildPage(rows, limit, s => (s.CreatedAt, s.Id.Value));
     }
 
+    /// <inheritdoc />
     public async ValueTask<Page<WorkflowInstanceSummary>> QueryInstancesAsync(
         InstanceQuery query, CancellationToken ct)
     {
@@ -1265,6 +1295,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return BuildPage(rows, limit, s => (s.CreatedAt, s.Id.Value));
     }
 
+    /// <inheritdoc />
     public async ValueTask<Page<RecurringSummary>> QueryRecurringAsync(
         RecurringQuery query, CancellationToken ct)
     {
@@ -1355,6 +1386,7 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         return new Page<RecurringSummary> { Items = items, NextCursor = next };
     }
 
+    /// <inheritdoc />
     public async ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct)
     {
         var job = await GetJobAsync(id, ct).ConfigureAwait(false);

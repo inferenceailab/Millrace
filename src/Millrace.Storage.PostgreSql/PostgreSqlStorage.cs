@@ -35,6 +35,13 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
     private readonly SemaphoreSlim _initGate = new(1, 1);
     private volatile bool _initialized;
 
+    /// <summary>Creates the provider over an existing data source.</summary>
+    /// <remarks>
+    /// <paramref name="time"/> defaults to <see cref="TimeProvider.System"/> and every <c>now</c>
+    /// comparison goes through it — database time is never read. That is what lets the conformance
+    /// kit drive this provider with a fake clock exactly as it drives the in-memory one, and it is
+    /// also why a multi-node deployment has to keep its clocks synchronized.
+    /// </remarks>
     public PostgreSqlStorage(NpgsqlDataSource dataSource, TimeProvider? time = null, PostgreSqlStorageOptions? options = null)
     {
         _dataSource = dataSource;
@@ -45,6 +52,11 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         _autoCreate = opts.AutoCreateSchema;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Backed by <c>LISTEN/NOTIFY</c> on a channel derived from the configured schema, so two
+    /// deployments sharing a database but not a schema do not wake each other.
+    /// </remarks>
     public StorageCapabilities Capabilities => StorageCapabilities.Notifications;
 
     /// <summary>Creates the schema and tables (idempotent). Called lazily unless disabled.</summary>
@@ -165,6 +177,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
 
     // ---------------------------------------------------------------- IJobStorage
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<JobId>> EnqueueAsync(IReadOnlyList<JobRecord> jobs, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -183,6 +196,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return ids;
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<JobRecord>> ClaimAsync(ClaimRequest request, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -248,6 +262,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
             .ToList();
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<JobId>> RenewLeasesAsync(
         string workerId, IReadOnlyList<JobId> jobs, TimeSpan lease, CancellationToken ct)
     {
@@ -280,6 +295,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return renewed;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> ApplyAsync(JobTransition transition, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -421,6 +437,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return true;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -447,6 +464,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return true;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -505,6 +523,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return true;
     }
 
+    /// <inheritdoc />
     public async ValueTask<JobRecord?> GetJobAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -516,6 +535,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return await reader.ReadAsync(ct).ConfigureAwait(false) ? ReadJob(reader) : null;
     }
 
+    /// <inheritdoc />
     public async ValueTask<int> ActivateDueJobsAsync(DateTimeOffset now, int batchSize, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -550,6 +570,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return activated;
     }
 
+    /// <inheritdoc />
     public async ValueTask UpsertRecurringAsync(RecurringJobRecord record, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -588,6 +609,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<RecurringJobRecord?> GetRecurringAsync(string id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -599,6 +621,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return await reader.ReadAsync(ct).ConfigureAwait(false) ? ReadRecurring(reader) : null;
     }
 
+    /// <inheritdoc />
     public async ValueTask RemoveRecurringAsync(string id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -609,6 +632,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<IReadOnlyList<RecurringJobRecord>> GetDueRecurringAsync(
         DateTimeOffset now, int batchSize, CancellationToken ct)
     {
@@ -634,6 +658,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return due;
     }
 
+    /// <inheritdoc />
     public async ValueTask<bool> TryFireRecurringAsync(
         string id, DateTimeOffset expectedFireTime, DateTimeOffset nextFireTime,
         JobRecord job, CancellationToken ct)
@@ -668,6 +693,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
 
     // ---------------------------------------------------------------- IWorkflowStorage
 
+    /// <inheritdoc />
     public async ValueTask CreateInstanceAsync(WorkflowInstanceRecord instance, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -698,6 +724,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask<WorkflowInstanceRecord?> GetInstanceAsync(WorkflowInstanceId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -730,6 +757,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         };
     }
 
+    /// <inheritdoc />
     public async ValueTask UpdateInstanceAsync(
         WorkflowInstanceRecord instance, long expectedRevision, CancellationToken ct)
     {
@@ -779,6 +807,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask AddBookmarkAsync(BookmarkRecord bookmark, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -807,6 +836,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask<BookmarkRecord?> ConsumeBookmarkAsync(
         string signalName, string correlationId, CancellationToken ct)
     {
@@ -844,6 +874,7 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
 
     // ---------------------------------------------------------------- IStorageNotifier
 
+    /// <inheritdoc />
     public async IAsyncEnumerable<QueueSignal> ListenAsync(
         IReadOnlySet<string> queues, [EnumeratorCancellation] CancellationToken ct)
     {
