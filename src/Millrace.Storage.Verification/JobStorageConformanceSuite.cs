@@ -13,15 +13,33 @@ namespace Millrace.Storage.Verification;
 /// </summary>
 public abstract partial class JobStorageConformanceSuite
 {
+    /// <summary>The instant every suite's fake clock starts at.</summary>
+    /// <remarks>
+    /// A fixed date rather than "now", so a failure reproduces with the same timestamps on any
+    /// machine on any day. Providers that store timestamps at reduced precision are the reason it
+    /// is a whole second with no fractional part.
+    /// </remarks>
     protected static readonly DateTimeOffset Epoch = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>The lease length the suite claims with unless a fact needs another.</summary>
     protected static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);
 
     /// <summary>Creates a fresh, empty store bound to <paramref name="time"/>.</summary>
     protected abstract ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time);
 
+    /// <summary>A fake clock starting at <see cref="Epoch"/>.</summary>
+    /// <remarks>
+    /// The suite advances this instead of sleeping, which is why a fact about lease expiry runs in
+    /// microseconds. A provider that reads database time rather than the injected
+    /// <see cref="TimeProvider"/> fails these facts, and that is deliberate — §4.1 requires it.
+    /// </remarks>
     protected static FakeTimeProvider NewTime() => new(Epoch);
 
+    /// <summary>A placeholder invocation, since no conformance fact executes a job.</summary>
+    /// <remarks>
+    /// The suite tests storage, not execution: it needs a well-formed invocation to persist and read
+    /// back, and nothing ever resolves the type it names.
+    /// </remarks>
     protected static JobInvocation DummyInvocation { get; } = new()
     {
         TypeName = "Conformance.Dummy, Conformance",
@@ -30,6 +48,11 @@ public abstract partial class JobStorageConformanceSuite
         ArgumentsJson = [],
     };
 
+    /// <summary>Builds a job record with everything defaulted except what a fact is about.</summary>
+    /// <remarks>
+    /// Defaults to <see cref="Retry.None"/>, so a fact that does not mention retries cannot have its
+    /// outcome quietly changed by a retry it did not ask for.
+    /// </remarks>
     protected static JobRecord Job(
         TimeProvider time,
         JobState state = JobState.Enqueued,
@@ -54,12 +77,22 @@ public abstract partial class JobStorageConformanceSuite
         ParentId = parentId,
     };
 
+    /// <summary>Enqueues one job and reads it back as the provider stored it.</summary>
+    /// <remarks>
+    /// Returns the stored record rather than the one passed in, so a fact asserts on what the
+    /// provider persisted rather than on what it was handed — which is where the two disagree.
+    /// </remarks>
     protected static async Task<JobRecord> EnqueueOneAsync(IJobStorage storage, JobRecord record)
     {
         await storage.EnqueueAsync([record], CancellationToken.None);
         return (await storage.GetJobAsync(record.Id, CancellationToken.None))!;
     }
 
+    /// <summary>Claims exactly one job, asserting that exactly one came back.</summary>
+    /// <remarks>
+    /// The assertion is part of the helper on purpose: a fact that meant to claim one job and
+    /// silently got none would otherwise fail later, somewhere that does not name the cause.
+    /// </remarks>
     protected static async Task<JobRecord> ClaimOneAsync(
         IJobStorage storage, string workerId = "w1", string queue = "default", TimeSpan? lease = null)
     {
@@ -69,6 +102,13 @@ public abstract partial class JobStorageConformanceSuite
         return claimed[0];
     }
 
+    /// <summary>Builds a transition already fenced to <paramref name="claimed"/>.</summary>
+    /// <remarks>
+    /// Takes the claimed record rather than loose values so the worker id and attempt come from what
+    /// the provider actually returned. A fact testing the fence itself passes a doctored record;
+    /// every other fact gets a fence that matches by construction and cannot fail for the wrong
+    /// reason.
+    /// </remarks>
     protected static JobTransition Transition(
         JobRecord claimed, JobState target, int? failures = null, DateTimeOffset? dueAt = null,
         string? error = null, bool activateContinuations = false, bool cancelContinuations = false,

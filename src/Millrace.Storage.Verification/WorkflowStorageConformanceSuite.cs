@@ -12,10 +12,13 @@ namespace Millrace.Storage.Verification;
 /// </summary>
 public abstract partial class WorkflowStorageConformanceSuite
 {
+    /// <inheritdoc cref="JobStorageConformanceSuite.Epoch"/>
     protected static readonly DateTimeOffset Epoch = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Creates a fresh, empty store bound to <paramref name="time"/>.</summary>
     protected abstract ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time);
 
+    /// <inheritdoc cref="JobStorageConformanceSuite.NewTime"/>
     protected static FakeTimeProvider NewTime() => new(Epoch);
 
     /// <summary>
@@ -24,6 +27,7 @@ public abstract partial class WorkflowStorageConformanceSuite
     /// </summary>
     protected static void AssertJsonEqual(string expected, string? actual) => JsonAssert.Equal(expected, actual);
 
+    /// <summary>Builds a running instance at revision 1, the shape a create should store.</summary>
     protected static WorkflowInstanceRecord Instance(TimeProvider time) => new()
     {
         Id = WorkflowInstanceId.New(time),
@@ -36,6 +40,12 @@ public abstract partial class WorkflowStorageConformanceSuite
         UpdatedAt = time.GetUtcNow(),
     };
 
+    /// <summary>Builds a bookmark waiting on a named signal for one correlation id.</summary>
+    /// <remarks>
+    /// The defaults collide on purpose: two bookmarks built without overriding them match the same
+    /// signal, which is what the at-most-once facts need in order to prove that delivering it
+    /// resumes exactly one instance.
+    /// </remarks>
     protected static BookmarkRecord Bookmark(
         TimeProvider time, WorkflowInstanceId instanceId,
         string signalName = "approval", string correlationId = "order-1") => new()
