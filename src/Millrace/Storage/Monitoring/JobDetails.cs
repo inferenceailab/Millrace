@@ -21,6 +21,7 @@ public sealed record JobDetails
     /// </summary>
     public required JobInvocation Invocation { get; init; }
 
+    /// <inheritdoc cref="JobRecord.Retry"/>
     public required Retry Retry { get; init; }
 
     /// <summary>

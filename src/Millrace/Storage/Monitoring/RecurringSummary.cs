@@ -16,6 +16,7 @@ public sealed record RecurringSummary
     /// <summary>Five-field cron expression, UTC.</summary>
     public required string Cron { get; init; }
 
+    /// <inheritdoc cref="RecurringJobRecord.Queue"/>
     public required string Queue { get; init; }
 
     /// <summary>Declared service type from the captured invocation, for display.</summary>
@@ -27,6 +28,7 @@ public sealed record RecurringSummary
     /// <summary>Copied onto every fired job.</summary>
     public int Priority { get; init; }
 
+    /// <inheritdoc cref="RecurringJobRecord.TenantId"/>
     public string? TenantId { get; init; }
 
     /// <summary>
@@ -58,7 +60,9 @@ public sealed record RecurringSummary
     /// <summary>The job behind <see cref="LastOutcome"/>, so the view can link to its error.</summary>
     public JobId? LastJobId { get; init; }
 
+    /// <inheritdoc cref="RecurringJobRecord.CreatedAt"/>
     public required DateTimeOffset CreatedAt { get; init; }
 
+    /// <inheritdoc cref="RecurringJobRecord.UpdatedAt"/>
     public required DateTimeOffset UpdatedAt { get; init; }
 }

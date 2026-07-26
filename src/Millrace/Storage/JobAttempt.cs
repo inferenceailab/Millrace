@@ -36,6 +36,13 @@ public sealed record JobAttempt
     /// <summary>The attempt number, matching <see cref="JobRecord.Attempt"/> at the time.</summary>
     public required int Attempt { get; init; }
 
+    /// <summary>Why the attempt is here rather than having simply succeeded.</summary>
+    /// <remarks>
+    /// The distinction that decides whether the attempt cost anything: a
+    /// <see cref="JobAttemptOutcome.Failed"/> row consumed retry budget, an
+    /// <see cref="JobAttemptOutcome.Interrupted"/> one did not. A timeline of nothing but
+    /// interruptions is infrastructure killing the job, not the job failing.
+    /// </remarks>
     public required JobAttemptOutcome Outcome { get; init; }
 
     /// <summary>When the attempt ended.</summary>
