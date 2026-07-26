@@ -43,6 +43,11 @@ public sealed record WorkflowCursor
     /// <summary>True once no activity remains in flight and no join is open.</summary>
     public bool Completed { get; init; }
 
+    /// <summary>Whether any fan-out is still waiting on branches.</summary>
+    /// <remarks>
+    /// Derived, so it is not persisted — <see cref="Joins"/> is the stored truth and this only reads
+    /// it. An instance with no open joins and nothing in flight has nowhere left to go.
+    /// </remarks>
     [JsonIgnore]
     public bool HasOpenJoins => Joins.Count > 0;
 

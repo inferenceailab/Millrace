@@ -9,25 +9,45 @@ namespace Millrace;
 [JsonConverter(typeof(WorkflowInstanceIdJsonConverter))]
 public readonly record struct WorkflowInstanceId(Guid Value)
 {
+    /// <summary>Mints an id from the system clock.</summary>
     public static WorkflowInstanceId New() => new(Guid.CreateVersion7());
 
+    /// <summary>Mints an id timestamped from <paramref name="time"/>.</summary>
+    /// <remarks>
+    /// The overload the engine uses, so a test driving a fake clock produces ids consistent with
+    /// the rest of the instance it is building. Version 7 keeps index writes local; providers still
+    /// treat the value as opaque.
+    /// </remarks>
     public static WorkflowInstanceId New(TimeProvider time) => new(Guid.CreateVersion7(time.GetUtcNow()));
 
+    /// <summary>Renders the id as 32 hex digits without hyphens.</summary>
+    /// <remarks>
+    /// For logs and URLs; JSON uses the hyphenated form via
+    /// <see cref="WorkflowInstanceIdJsonConverter"/>.
+    /// </remarks>
     public override string ToString() => Value.ToString("n");
 }
 
 /// <summary>Serializes <see cref="WorkflowInstanceId"/> as a bare GUID string.</summary>
 public sealed class WorkflowInstanceIdJsonConverter : JsonConverter<WorkflowInstanceId>
 {
+    /// <inheritdoc />
     public override WorkflowInstanceId Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         => new(reader.GetGuid());
 
+    /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, WorkflowInstanceId value, JsonSerializerOptions options)
         => writer.WriteStringValue(value.Value);
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A separate path because property names are read as raw strings, with no <c>GetGuid</c>
+    /// available on the reader.
+    /// </remarks>
     public override WorkflowInstanceId ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         => new(Guid.Parse(reader.GetString()!));
 
+    /// <inheritdoc />
     public override void WriteAsPropertyName(Utf8JsonWriter writer, WorkflowInstanceId value, JsonSerializerOptions options)
         => writer.WritePropertyName(value.Value.ToString("d"));
 }
