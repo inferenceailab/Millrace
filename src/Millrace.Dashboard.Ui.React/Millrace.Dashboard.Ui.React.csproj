@@ -56,6 +56,13 @@
   <ItemGroup>
     <None Remove="ui/node_modules/**" />
     <None Remove="ui/dist/**" />
+    <!--
+      ui/ is a JavaScript project; nothing under it is ours to compile. Without this the SDK's
+      default **/*.cs glob reaches into node_modules, which is how node-gyp's Find-VisualStudio.cs
+      ended up compiled into the Angular package. No dependency here vendors a .cs file today; the
+      glob is the hole, not the dependency.
+    -->
+    <Compile Remove="ui/**/*.cs" />
   </ItemGroup>
 
 </Project>
