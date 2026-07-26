@@ -123,4 +123,22 @@ public interface ISagaBuilder<TData>
     /// </remarks>
     /// <exception cref="InvalidOperationException">No step has been appended yet.</exception>
     ISagaBuilder<TData> OnFailure(StepFailurePolicy policy);
+
+    /// <summary>
+    /// Appends a saga inside this one (§11.29, §11.35).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A failure inside the nested saga unwinds the nested saga first, completely, and only then
+    /// reports failure outward — so this saga's compensations run against the state its own steps
+    /// actually left behind.
+    /// </para>
+    /// <para>
+    /// <paramref name="policy"/> has no default because it decides what this saga can still promise.
+    /// It answers the other direction: the nested saga committed, this one failed later, and either
+    /// the nested work is undone with it or it stands.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The nested saga has no steps.</exception>
+    ISagaBuilder<TData> Saga(Action<ISagaBuilder<TData>> steps, NestedSagaPolicy policy);
 }

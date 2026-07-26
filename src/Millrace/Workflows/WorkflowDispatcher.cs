@@ -243,6 +243,26 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
                 && sagas.TryGetValue(id, out var open)
                 && open.Compensating;
 
+            // This saga had nothing of its own to undo, but a saga around it may. Its failure is
+            // still the enclosing saga's failure, so the unwind continues outward rather than
+            // stopping at the innermost one (§11.29).
+            if (!compensationFailed && node.SagaId is { } failed)
+            {
+                sagas.Remove(failed);
+                if (TryPropagateOutward(failed, sagas, out var outward))
+                {
+                    Checkpoint(
+                        WorkflowInstanceState.Running,
+                        joins: new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal),
+                        waits: new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal),
+                        sagas: sagas,
+                        scheduled: outward,
+                        bookmarks: []);
+
+                    return Task.CompletedTask;
+                }
+            }
+
             // Otherwise there was nothing to undo, and recording the failure is what keeps a dead
             // activity from leaving the instance Running forever.
             Checkpoint(
@@ -263,6 +283,32 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             if (!sagas.TryGetValue(sagaId, out var saga) || saga.Completed.Count == 0)
             {
                 return; // already unwound — a duplicate delivery or a retry after the checkpoint
+            }
+
+            // The step being undone is itself a saga: hand the unwind inward rather than looking for
+            // a compensation activity it does not have. The outer's entry is consumed now, so when
+            // the inner finishes it resumes the outer one step further back (§11.35).
+            if (Node(stepNodeId).Kind == WorkflowNodeKind.Saga
+                && sagas.TryGetValue(stepNodeId, out var nested)
+                && nested.Completed.Count > 0)
+            {
+                sagas[sagaId] = saga with
+                {
+                    Completed = saga.Completed.Take(saga.Completed.Count - 1).ToList(),
+                    Compensating = true,
+                };
+                sagas[stepNodeId] = nested with { Compensating = true };
+
+                Checkpoint(
+                    WorkflowInstanceState.Running,
+                    joins: new Dictionary<string, WorkflowJoin>(_cursor.Joins, StringComparer.Ordinal),
+                    waits: new Dictionary<string, WorkflowWait>(_cursor.Waits, StringComparer.Ordinal),
+                    sagas: sagas,
+                    scheduled: [WorkflowJobFactory.CreateCompensation(
+                        _instance, stepNodeId, nested.Completed[^1], _owner._options, _owner._time)],
+                    bookmarks: []);
+
+                return;
             }
 
             if (_definition.Compensations.TryGetValue(stepNodeId, out var compensationType))
@@ -286,7 +332,14 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
 
             if (next.Count == 0)
             {
+                // Undone completely. If something encloses this saga, its failure is now the outer
+                // saga's failure and the unwind carries on there — the instance is only compensated
+                // once the outermost one has nothing left (§11.29).
                 sagas.Remove(sagaId);
+                if (TryPropagateOutward(sagaId, sagas, out var outward))
+                {
+                    next = outward;
+                }
             }
 
             Checkpoint(
@@ -403,6 +456,78 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
             _owner._effects.Bookmarks.AddRange(bookmarks);
         }
 
+        /// <summary>
+        /// Whether <paramref name="nodeSagaId"/> is <paramref name="sagaId"/> or sits inside it.
+        /// </summary>
+        /// <remarks>
+        /// A saga is finished when nothing it owns is still scheduled, and work inside a nested saga
+        /// is still work the outer one owns. Comparing ids directly was equivalent while nesting was
+        /// impossible; with it, an outer saga was forgotten the moment control entered the inner
+        /// one, and its steps then had nothing left to undo them.
+        /// </remarks>
+        private bool WithinSaga(string? nodeSagaId, string sagaId)
+        {
+            for (var id = nodeSagaId; id is not null; id = Node(id).SagaId)
+            {
+                if (string.Equals(id, sagaId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Drops a saga's record, and any nested saga records kept underneath it.
+        /// </summary>
+        /// <remarks>
+        /// A nested saga declared <see cref="NestedSagaPolicy.Unwind"/> outlives its own commit so
+        /// the enclosing saga can replay it. Once the enclosing saga commits, nothing can reach
+        /// either of them again, and a record left behind would be a saga the engine believes is
+        /// still open.
+        /// </remarks>
+        private void Forget(string sagaId, Dictionary<string, SagaState> sagas)
+        {
+            sagas.Remove(sagaId);
+
+            foreach (var nested in _definition.Graph.Nodes
+                .Where(n => n.Kind == WorkflowNodeKind.Saga && n.SagaId == sagaId))
+            {
+                Forget(nested.Id, sagas);
+            }
+        }
+
+        /// <summary>
+        /// Continues the unwind in the enclosing saga, if there is one with anything left to undo.
+        /// </summary>
+        /// <remarks>
+        /// The single place §11.29's "propagates outward" is implemented, and it serves both routes
+        /// to it: a nested saga that failed and finished undoing itself, and a nested saga being
+        /// replayed because the outer one failed. Innermost-first falls out of it either way.
+        /// </remarks>
+        private bool TryPropagateOutward(
+            string finishedSagaId, Dictionary<string, SagaState> sagas, out List<JobRecord> scheduled)
+        {
+            scheduled = [];
+
+            if (Node(finishedSagaId).SagaId is not { } enclosing
+                || !sagas.TryGetValue(enclosing, out var outer)
+                || outer.Completed.Count == 0)
+            {
+                return false;
+            }
+
+            sagas[enclosing] = outer with { Compensating = true };
+            scheduled =
+            [
+                WorkflowJobFactory.CreateCompensation(
+                    _instance, enclosing, outer.Completed[^1], _owner._options, _owner._time),
+            ];
+
+            return true;
+        }
+
         private WorkflowNode Node(string id)
             => _definition.Graph.Nodes.FirstOrDefault(n => n.Id == id)
                ?? throw new InvalidOperationException(
@@ -463,12 +588,25 @@ internal sealed class WorkflowDispatcher : IWorkflowDispatcher
 
             plan.Route(from, data);
 
-            // A saga whose steps have all run has nothing left to undo, so it stops being tracked.
+            // A saga whose steps have all run has nothing left to undo, so it stops being tracked —
+            // unless it is nested and declared Unwind, in which case "nothing left to undo" is only
+            // true until the saga around it fails (§11.35).
             if (from.SagaId is { } finishedSaga
-                && !plan.Scheduled.Any(j => _definition.Graph.Nodes
-                    .First(n => n.Id == j.ActivityNodeId).SagaId == finishedSaga))
+                && !plan.Scheduled.Any(j => WithinSaga(
+                    _definition.Graph.Nodes.First(n => n.Id == j.ActivityNodeId).SagaId,
+                    finishedSaga)))
             {
-                plan.Sagas.Remove(finishedSaga);
+                var sagaNode = Node(finishedSaga);
+                if (sagaNode.SagaId is { } enclosing && sagaNode.Nesting == NestedSagaPolicy.Unwind)
+                {
+                    // Kept, so the outer has something to replay, and recorded as a step of the
+                    // outer so the replay happens in the right place in the reverse order.
+                    plan.RecordSagaStep(enclosing, finishedSaga);
+                }
+                else
+                {
+                    Forget(finishedSaga, plan.Sagas);
+                }
             }
 
             // A scheduled timeout is not progress, so it does not keep an instance Running: an

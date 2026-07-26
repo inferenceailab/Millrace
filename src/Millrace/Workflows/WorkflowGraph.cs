@@ -129,6 +129,56 @@ public sealed record WorkflowNode
     /// that started under one policy keeps it even if the definition is edited.
     /// </remarks>
     public StepFailurePolicy? OnFailure { get; init; }
+
+    /// <summary>
+    /// For a <see cref="WorkflowNodeKind.Saga"/> nested inside another saga: what happens to this
+    /// one once it has committed, if the saga around it later unwinds (§11.35).
+    /// </summary>
+    /// <remarks>
+    /// Null on a top-level saga, where the question does not arise. Serialized with the rest of the
+    /// shape, so an instance keeps the answer its definition was compiled with.
+    /// </remarks>
+    public NestedSagaPolicy? Nesting { get; init; }
+}
+
+/// <summary>
+/// What becomes of a nested saga that has already committed, when the saga around it unwinds
+/// (§11.35).
+/// </summary>
+/// <remarks>
+/// <para>
+/// There is no default, and that is the point. §11.29 settled the other direction — a failing inner
+/// saga unwinds itself and then propagates outward — by arguing that an outer saga's promise is
+/// broken if something nested inside it lets the outer proceed past work that did not happen. The
+/// mirror of that argument says a completed inner saga should be undone with the outer.
+/// </para>
+/// <para>
+/// But the mirror is not always right. An inner saga that charged a card through a provider with no
+/// reversal, or that told a third party something true at the time, is <em>final</em>: replaying its
+/// compensations would be a second wrong rather than an undo. Only the author knows which they
+/// wrote, so only the author can say.
+/// </para>
+/// </remarks>
+public enum NestedSagaPolicy
+{
+    /// <summary>
+    /// An outer unwind undoes this saga too, innermost step first.
+    /// </summary>
+    /// <remarks>
+    /// The inner saga's completed steps stay on the cursor after it commits, so the outer has
+    /// something to replay, and the outer records the inner saga as one of its own steps.
+    /// </remarks>
+    Unwind = 0,
+
+    /// <summary>
+    /// Once this saga commits it stands; an outer unwind undoes only its own direct steps.
+    /// </summary>
+    /// <remarks>
+    /// The inner saga's record is dropped on commit, exactly as a top-level saga's is. Choosing this
+    /// means the outer saga can no longer promise all-or-nothing across the nested part, which is a
+    /// real cost and sometimes the correct one.
+    /// </remarks>
+    Keep = 1,
 }
 
 /// <summary>
