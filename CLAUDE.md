@@ -11,9 +11,12 @@
 - Core rule: `Millrace` (the core package) depends only on the BCL and `Microsoft.Extensions.*`. No database clients, no application frameworks (no ABP, MassTransit, MediatR).
 - `net10.0` only, nullable enabled, warnings are errors, package versions live centrally in `Directory.Packages.props`.
 - Build with `dotnet build`, test with `dotnet test`.
-- Building needs **Node 20+** as well as the .NET SDK: `Millrace.Dashboard.Ui.React` compiles its
-  embedded bundle during the .NET build. `-p:SkipUiBuild=true` skips it. Consumers of the published
-  packages never need Node — keep it that way.
+- Building needs **Node 22.22.3+ or 24.15.0+** as well as the .NET SDK — the floor the Angular CLI
+  enforces, and it refuses to run below it with no npm output, so the failure reads as a bare exit
+  code. Both `Millrace.Dashboard.Ui.React` and `Millrace.Dashboard.Ui.Angular` compile their
+  embedded bundles during the .NET build. `-p:SkipUiBuild=true` skips it. Consumers of the published
+  packages never need Node — keep it that way, and `scripts/smoke-test-packages.ps1` is what proves
+  it.
 - The UI bundle is generated, never committed. Change `ui/src`, not `ui/dist`.
 
 ## Planning

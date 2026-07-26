@@ -73,7 +73,7 @@ dotnet build
 dotnet test
 ```
 
-Requires the .NET 10 SDK, and **Node 20+** — `Millrace.Dashboard.Ui.React` compiles its embedded
+Requires the .NET 10 SDK, and **Node 22.22.3+ or 24.15.0+** (the Angular CLI's floor) — the React and Angular UI packages compile their embedded
 bundle during the .NET build. Consumers of the published package never need Node; that is the point
 of shipping the bundle prebuilt. To build the C# alone, pass `-p:SkipUiBuild=true` (the resulting
 package serves no UI).
