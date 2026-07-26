@@ -1,6 +1,8 @@
 # Picking this up again
 
-Written 2026-07-26, at the end of the session that closed milestone 0.5.
+Written 2026-07-26, at the end of the session that closed milestone 0.5, and revised later the same
+day — after `0.1.0-alpha.1` was published and [#99](https://github.com/inferenceailab/Millrace/issues/99)
+closed.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -9,14 +11,31 @@ what needs a human, what will bite you, and what the last session learned the ha
 
 Delete anything that stops being true.
 
-## One thing waiting on a person
+## Nothing is waiting on a person
 
-**The Trusted Publishing policy has not been created.** `.github/workflows/release.yml` packs,
-smoke-tests and publishes on a `v*` tag, and it has never run against a real tag. There is no secret
-to add — it authenticates by exchanging a GitHub OIDC token for a one-hour key (§11.33) — but the
-policy has to exist on nuget.org first, under **your username → Trusted Publishing**: repository
-owner `inferenceailab`, repository `Millrace`, workflow file `release.yml`, no environment. Until it
-exists the first release fails at the login step. Deferred on purpose; nothing else depends on it.
+That is new. The one item that was — publishing credentials — is done and proven by a real release.
+
+## Releasing
+
+**It works, and it has run for real.** `v0.1.0-alpha.1` put all eight packages on nuget.org on
+2026-07-26, first attempt. Tag `vX.Y.Z` and the rest is automatic: pack, smoke-test the built
+artifacts, exchange a GitHub OIDC token for a one-hour nuget.org key (§11.33), push, create the
+GitHub release. No secret is stored, so nothing expires and nothing needs rotating.
+
+Three things to know before the next tag.
+
+**The tag is the version, and nuget.org has no delete** — only unlist. A prerelease tag is the cheap
+way to exercise a change to the release path, and the workflow infers prerelease status from the
+hyphen, so `v1.2.3-rc.1` marks itself correctly without anyone remembering to.
+
+**`release.yml`'s actions only run on a tag**, so CI never exercises them. They went from v4 to
+`checkout@v7`, `setup-dotnet@v6`, `setup-node@v7` and `upload-artifact@v7` on 2026-07-26 and have
+not run since — the next release is their first real test. This is the same blind spot §11.31
+identified when it moved packing onto every push, and it has not been closed for this half.
+
+**The trust policy is pinned to the repository and to the file name `release.yml`.** Renaming or
+moving that file breaks publishing, which is the trade §11.33 made deliberately: authority belongs
+to the thing that runs.
 
 ## What 1.0 still needs
 
@@ -74,5 +93,17 @@ Worth knowing before deciding whether to keep paying for them.
   actions at all, and now fails the build when a contract endpoint no UI reaches.
 - **The wire-format tests** (§11.24) found enum values serializing as integers — which had silently
   removed every status colour from the dashboard and inverted the Cancel/Requeue buttons.
+- **Refusing to suppress `CS1574`** (§11.31) has now caught four broken crefs — three when
+  documentation was first turned on, and one while writing the rest of it: a reference to a type
+  from a package the project does not depend on. It compiled, and it read as correct.
 
 Each of those was invisible to every other test in the repo.
+
+Newly true, and worth the same scrutiny in a few months:
+
+- **`CS1591` is a build error** (§11.34). Every public member outside the conformance kit is
+  documented, and a new undocumented one now fails the build rather than joining a backlog. The
+  question to ask later is whether that produced comments worth reading or comments written to
+  satisfy a compiler.
+- **`UiPackagingTests`** asserts each UI assembly exports only its own types, after node-gyp's
+  `Find-VisualStudio.cs` shipped eleven public COM interop types inside the Angular package.
