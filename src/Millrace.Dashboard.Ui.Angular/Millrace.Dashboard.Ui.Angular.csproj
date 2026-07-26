@@ -57,6 +57,14 @@
     <None Remove="ui/node_modules/**" />
     <None Remove="ui/dist/**" />
     <None Remove="ui/.angular/**" />
+    <!--
+      ui/ is a JavaScript project; nothing under it is ours to compile. Without this the SDK's
+      default **/*.cs glob reaches into node_modules — node-gyp ships a Find-VisualStudio.cs, which
+      put 52 public COM interop types into this assembly and the published package. Stated for the
+      whole tree rather than for node_modules alone, because the next dependency to vendor a .cs
+      file should not be a second bug.
+    -->
+    <Compile Remove="ui/**/*.cs" />
   </ItemGroup>
 
 </Project>
