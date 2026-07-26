@@ -5,6 +5,12 @@ namespace Millrace;
 /// <summary>Node-level configuration for workers, scheduling, and serialization.</summary>
 public sealed class MillraceOptions
 {
+    /// <summary>The queue name used when none is given.</summary>
+    /// <remarks>
+    /// A constant rather than a setting, because both ends fall back to it independently: an
+    /// enqueue that names no queue and a node that configures none have to arrive at the same
+    /// string, or the job is written somewhere nothing claims from.
+    /// </remarks>
     public const string DefaultQueue = "default";
 
     /// <summary>Queues this node's workers claim from (unordered — no queue precedence).</summary>
@@ -20,13 +26,37 @@ public sealed class MillraceOptions
     /// </summary>
     public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>How often a worker renews the leases on jobs it is running.</summary>
+    /// <remarks>
+    /// <see cref="LeaseDuration"/> must exceed this and startup validation refuses a configuration
+    /// where it does not — the gap between the two is the entire tolerance for renewal latency and
+    /// inter-node clock skew. Shortening this is what allows a correspondingly shorter lease, which
+    /// is the value that governs how long a crashed node's jobs stay unclaimable; the cost is more
+    /// renewal traffic against storage.
+    /// </remarks>
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>Cadence of the opportunistic scheduler pass (due activation + recurring fires).</summary>
     public TimeSpan SchedulerInterval { get; set; } = TimeSpan.FromSeconds(1);
 
+    /// <summary>Ceiling on how many jobs a worker claims in one round trip.</summary>
+    /// <remarks>
+    /// The effective size is the smaller of this and the node's free capacity, so a worker never
+    /// claims work it has no slot to run. Raising it amortises the claim query over more jobs while
+    /// the pool is mostly idle, and changes nothing once it is saturated.
+    /// </remarks>
     public int ClaimBatchSize { get; set; } = 16;
 
+    /// <summary>
+    /// Ceiling on the work one scheduler pass does — both due jobs activated and recurring
+    /// definitions considered for firing.
+    /// </summary>
+    /// <remarks>
+    /// A pass makes one call of each kind and does not loop, so a backlog larger than this drains
+    /// over consecutive passes at <see cref="SchedulerInterval"/>. It bounds the size of a single
+    /// transaction rather than throughput: a thousand jobs falling due in the same second are all
+    /// still activated, just not all at once.
+    /// </remarks>
     public int ActivationBatchSize { get; set; } = 100;
 
     /// <summary>Adaptive polling floor (used right after work was found).</summary>

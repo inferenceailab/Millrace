@@ -43,6 +43,15 @@ public interface IJobClient
         EnqueueOptions? options = null, CancellationToken ct = default)
         where T : class;
 
+    /// <summary>
+    /// Removes a cron definition, so it produces no further occurrences.
+    /// </summary>
+    /// <remarks>
+    /// The definition only. Occurrences it already fired are ordinary jobs by then and run to
+    /// completion, keeping their link back to the id that produced them — that link is provenance,
+    /// not a live reference, so removing a schedule leaves its history readable instead of dangling
+    /// or cascading.
+    /// </remarks>
     ValueTask RemoveRecurringAsync(string recurringId, CancellationToken ct = default);
 
     /// <summary>
