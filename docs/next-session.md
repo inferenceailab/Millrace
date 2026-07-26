@@ -11,9 +11,25 @@ what needs a human, what will bite you, and what the last session learned the ha
 
 Delete anything that stops being true.
 
-## Nothing is waiting on a person
+## Start here
 
-That is new. The one item that was — publishing credentials — is done and proven by a real release.
+Nested sagas ([#119](https://github.com/inferenceailab/Millrace/pull/119), §11.35) and the Blazor UI
+([#120](https://github.com/inferenceailab/Millrace/pull/120), §11.36) are both merged. `main` builds
+clean and the whole suite passes.
+
+**[#47](https://github.com/inferenceailab/Millrace/issues/47) is still open, and that needs a
+decision rather than a merge.** Its three acceptance criteria — embedded prebuilt bundle, frozen
+contract, parity tracked — are all met, so by its own terms it is done. What is not done is visual
+parity: the Blazor UI is one page against the shared stylesheet, where React and Angular have a
+multi-view layout. Either close it and raise the layout work as its own issue, or keep it open and
+say so in the issue, but do not leave the question implicit — a criteria-complete issue sitting open
+with no note reads as forgotten.
+
+## Nothing is blocking on a person
+
+Publishing credentials were the last blocker and they are done, proven by a real release rather than
+by configuration looking right. The [#47](https://github.com/inferenceailab/Millrace/issues/47) call
+above wants a person, but nothing waits on it — it is a scoping decision, not a gate.
 
 ## Releasing
 
@@ -43,10 +59,9 @@ Detail is in the issues; the ordering argument is not.
 
 | | Why it is where it is |
 |---|---|
-| [#47](https://github.com/inferenceailab/Millrace/issues/47) Blazor UI | The biggest remaining feature. §11.23 settled that it is **native Blazor over the C# contract types**, not a web component — read that decision before starting, because the spike that produced it is in `spikes/ui-webcomponents/` and its README explains what was measured. |
-| [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. |
-| [#49](https://github.com/inferenceailab/Millrace/issues/49) Benchmarks | Positioning against Hangfire and WorkflowCore. Nothing depends on it. |
-| [#77](https://github.com/inferenceailab/Millrace/issues/77) Nested sagas | **Design already settled** in §11.29 — inner unwinds first, then propagates outward. Implementation only. Two consequences recorded there: compensation becomes a *stack* rather than a list, and a failed inner compensation must suspend the whole instance. |
+| [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. **Not codeable yet** — nobody has chosen a generator (docfx, Statiq, something else), and that is a §11 decision rather than a task. |
+| [#49](https://github.com/inferenceailab/Millrace/issues/49) Benchmarks | Positioning against Hangfire and WorkflowCore. Nothing depends on it, which makes it the one that can be picked up cold. |
+| [#47](https://github.com/inferenceailab/Millrace/issues/47) Blazor UI | Shipped in [#120](https://github.com/inferenceailab/Millrace/pull/120) and still open on purpose — see **Start here**. All three acceptance criteria met; it is **one page**, not the multi-view layout the other two have. |
 
 ## Things that will bite you
 
@@ -70,6 +85,11 @@ blaming CI.
 this twice: polling too tightly starves the worker through the storage lock, and polling without
 advancing the fake clock means the worker never wakes at all. `Eventually.ObservedAsync` in
 `test/Millrace.Tests/Workflows/` exists for this — advance the clock inside the predicate.
+
+**`gh pr edit` does not work on this repository.** It fails with a Projects-classic GraphQL error
+because it fetches project cards on the way past. `gh pr create` and `gh pr merge` are fine; editing
+a title or body needs `gh api repos/inferenceailab/Millrace/pulls/<n> -X PATCH --input <file>`. And
+`jq` is not installed on the development machine, so build the payload with `node -e` instead.
 
 **A suppression hides more than what it was added for.** `CS1591` was suppressed so packaging could
 proceed, and it swallowed 52 warnings that were not about missing documentation at all: the SDK's
@@ -107,3 +127,6 @@ Newly true, and worth the same scrutiny in a few months:
   satisfy a compiler.
 - **`UiPackagingTests`** asserts each UI assembly exports only its own types, after node-gyp's
   `Find-VisualStudio.cs` shipped eleven public COM interop types inside the Angular package.
+- **The parity check caught its author.** Adding the Blazor UI, it failed on the first run because
+  the hand-written client was missing `/info` — the same "endpoint added, UI forgotten" failure it
+  was built for, this time against the person building it.
