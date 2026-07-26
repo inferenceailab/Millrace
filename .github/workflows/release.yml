@@ -17,19 +17,19 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Source Link records the commit, so the shallow default would leave the packages pointing
           # at a commit the repository cannot resolve.
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
       # Needed to BUILD the UI packages, never to consume them. The smoke test below is what keeps
       # that distinction honest.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.x
 
@@ -41,6 +41,17 @@ jobs:
             echo "::error::Tag '${GITHUB_REF_NAME}' does not contain a version." && exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # A SemVer prerelease is anything with a hyphen after the version core. Derived rather
+          # than passed, because the tag is already the single source of the version and a second
+          # place to say "this one is an alpha" is a second place to forget. Without the flag
+          # GitHub marks the release Latest, so 0.1.0-alpha.1 sat on the front page as though it
+          # were the recommended version.
+          case "$version" in
+            *-*) echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=" >> "$GITHUB_OUTPUT" ;;
+          esac
+
           echo "Releasing $version"
 
       - name: Pack
@@ -59,7 +70,7 @@ jobs:
           -Packages "$PWD/artifacts"
           -Version ${{ steps.version.outputs.version }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages
           path: artifacts/*
@@ -86,4 +97,4 @@ jobs:
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${GITHUB_REF_NAME}" artifacts/*.nupkg --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" artifacts/*.nupkg --generate-notes ${{ steps.version.outputs.prerelease }}
