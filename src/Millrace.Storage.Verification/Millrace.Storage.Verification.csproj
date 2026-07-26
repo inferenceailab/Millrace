@@ -2,6 +2,19 @@
 
   <PropertyGroup>
     <Description>Conformance test kit (TCK) for Millrace storage providers. Inherit the suites in your provider's test project to verify the atomicity contract.</Description>
+    <!--
+      The one project that still suppresses CS1591 (§11.34). Around 110 of its public members are
+      [Fact] and [Theory] methods, which are public because xUnit requires it and not because
+      anything calls them. Their names are already the specification —
+      Run_now_makes_a_retrying_job_claimable_without_spending_retry_budget says more than a
+      <summary> above it could — so documenting them would produce 110 restatements, which is the
+      failure #99 existed to prevent.
+
+      What a provider author actually implements or calls IS documented: IStorageHarness, the
+      abstract CreateHarnessAsync on each suite, and the fixture helpers. Scoped here rather than
+      left global so that a new undocumented member anywhere else is still a build error.
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

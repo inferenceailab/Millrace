@@ -28,7 +28,6 @@ Detail is in the issues; the ordering argument is not.
 | [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. |
 | [#49](https://github.com/inferenceailab/Millrace/issues/49) Benchmarks | Positioning against Hangfire and WorkflowCore. Nothing depends on it. |
 | [#77](https://github.com/inferenceailab/Millrace/issues/77) Nested sagas | **Design already settled** in §11.29 — inner unwinds first, then propagates outward. Implementation only. Two consequences recorded there: compensation becomes a *stack* rather than a list, and a failed inner compensation must suspend the whole instance. |
-| [#99](https://github.com/inferenceailab/Millrace/issues/99) Documentation | The issue's figure of 164 was only ever the core package at one moment; across the solution it was 404, and 52 of those turned out to be a third-party file compiled by mistake ([#104](https://github.com/inferenceailab/Millrace/pull/104)). `CS1591` is suppressed in `Directory.Build.props`; **that suppression is the deliverable to delete**, and it cannot go until every project is clean. Core is nearly done. `Millrace.Storage.Verification` is the largest block left and **nobody has decided whether its conformance suites should be documented at all** — it ships for provider authors, so it is either public API or scaffolding, and that call decides ~128 members. Keep doing it per area; comments written in bulk become restatements of the method name. |
 
 ## Things that will bite you
 

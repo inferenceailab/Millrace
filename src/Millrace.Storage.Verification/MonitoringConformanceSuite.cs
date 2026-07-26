@@ -16,10 +16,13 @@ namespace Millrace.Storage.Verification;
 /// </remarks>
 public abstract class MonitoringConformanceSuite
 {
+    /// <inheritdoc cref="JobStorageConformanceSuite.Epoch"/>
     protected static readonly DateTimeOffset Epoch = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Creates a fresh, empty store bound to <paramref name="time"/>.</summary>
     protected abstract ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time);
 
+    /// <inheritdoc cref="JobStorageConformanceSuite.NewTime"/>
     protected static FakeTimeProvider NewTime() => new(Epoch);
 
     private static JobRecord Job(

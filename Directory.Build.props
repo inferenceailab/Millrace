@@ -34,18 +34,22 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <!--
-      Ships the XML docs that exist, which is most of the interesting API and the part carrying the
-      reasoning. CS1591 (missing comment on a public member) is suppressed rather than fixed: there
-      are 164 of them, and writing 164 comments in one pass produces 164 restatements of the method
-      name, which is worse than an honest gap. Tracked separately; the suppression is the thing to
-      delete when it closes.
+      Ships the XML docs, which are most of the interesting API and the part carrying the reasoning.
 
-      CS1574 — an unresolvable cref — is deliberately NOT suppressed. That is a broken link in
-      shipped documentation, not a missing one.
+      CS1591 is no longer suppressed here (§11.34, closing #99): every public member outside the
+      conformance kit is documented, and a new undocumented one is now a build error rather than a
+      gap nobody sees. Millrace.Storage.Verification opts back in for itself, because public-ness
+      there is an xUnit requirement rather than an API decision — the reasoning is on that project.
+
+      CS1574 — an unresolvable cref — was never suppressed. That is a broken link in shipped
+      documentation rather than a missing one, and it has since caught two.
     -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- CS1573 is the same category as CS1591: a member documented in prose but not per-parameter. -->
-    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <!--
+      CS1573 stays: the house style documents a member in prose rather than tagging every parameter,
+      and turning this on would force <param> tags whose only content is the parameter's own name.
+    -->
+    <NoWarn>$(NoWarn);CS1573</NoWarn>
   </PropertyGroup>
 
 </Project>

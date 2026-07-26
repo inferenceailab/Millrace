@@ -10,8 +10,15 @@ namespace Millrace.Storage.Verification;
 /// </summary>
 public interface IStorageHarness : IAsyncDisposable
 {
+    /// <summary>The job contract under test.</summary>
     IJobStorage Jobs { get; }
 
+    /// <summary>The workflow contract under test.</summary>
+    /// <remarks>
+    /// The same underlying store as <see cref="Jobs"/>, not a second one. Several facts span both —
+    /// a checkpoint committing in the same atom as a job transition is the contract, and it cannot
+    /// be verified if the two arrive at different databases.
+    /// </remarks>
     IWorkflowStorage Workflows { get; }
 
     /// <summary>
