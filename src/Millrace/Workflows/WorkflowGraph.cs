@@ -47,8 +47,20 @@ public enum WorkflowNodeKind
 /// </remarks>
 public sealed record WorkflowNode
 {
+    /// <summary>Identifies the node within its graph.</summary>
+    /// <remarks>
+    /// Generated from build order, not chosen — and a persisted cursor refers to instances by these
+    /// ids, so an edit that shifts them silently repoints every in-flight instance. That is what
+    /// versioning a definition protects against, and why node ids are a correctness concern rather
+    /// than a naming one.
+    /// </remarks>
     public required string Id { get; init; }
 
+    /// <summary>What kind of node this is, which decides how the engine advances past it.</summary>
+    /// <remarks>
+    /// Also decides which of the optional fields below carry anything: an activity node names an
+    /// activity type, a branch names its arms, and the rest stay null.
+    /// </remarks>
     public required WorkflowNodeKind Kind { get; init; }
 
     /// <summary>The next node in this sequence; null ends the sequence.</summary>
@@ -166,12 +178,24 @@ public enum StepFailurePolicy
 /// </summary>
 public sealed record WorkflowGraph
 {
+    /// <summary>The workflow this is the shape of.</summary>
     public required string DefinitionId { get; init; }
 
+    /// <summary>The version this shape belongs to.</summary>
+    /// <remarks>
+    /// Exported alongside the nodes so a rendered graph says which version it is drawing — two
+    /// versions of one workflow are different shapes, and a picture without this cannot say which.
+    /// </remarks>
     public required int Version { get; init; }
 
     /// <summary>Entry node; null only for an empty definition, which validation rejects.</summary>
     public string? Start { get; init; }
 
+    /// <summary>Every node in the graph, flat.</summary>
+    /// <remarks>
+    /// A flat list rather than a tree: nesting is expressed by nodes referring to each other by id,
+    /// which is what lets a cursor name a position with a single string and lets the whole shape
+    /// survive a round trip through JSON.
+    /// </remarks>
     public required IReadOnlyList<WorkflowNode> Nodes { get; init; }
 }
