@@ -16,6 +16,7 @@ public sealed class JobClient(
 {
     private readonly MillraceOptions _options = options.Value;
 
+    /// <inheritdoc />
     public async ValueTask<JobId> EnqueueAsync<T>(
         Expression<Func<T, Task>> call, EnqueueOptions? options = null, CancellationToken ct = default)
         where T : class
@@ -26,6 +27,12 @@ public sealed class JobClient(
         return ids[0];
     }
 
+    /// <inheritdoc />
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="delay"/> is negative. A past due time is expressed with the
+    /// <see cref="DateTimeOffset"/> overload, where it is unambiguous; a negative delay is far more
+    /// likely to be a subtraction that went the wrong way.
+    /// </exception>
     public ValueTask<JobId> ScheduleAsync<T>(
         Expression<Func<T, Task>> call, TimeSpan delay, EnqueueOptions? options = null, CancellationToken ct = default)
         where T : class
@@ -34,6 +41,7 @@ public sealed class JobClient(
         return ScheduleAsync(call, time.GetUtcNow() + delay, options, ct);
     }
 
+    /// <inheritdoc />
     public async ValueTask<JobId> ScheduleAsync<T>(
         Expression<Func<T, Task>> call, DateTimeOffset at, EnqueueOptions? options = null, CancellationToken ct = default)
         where T : class
@@ -44,6 +52,7 @@ public sealed class JobClient(
         return ids[0];
     }
 
+    /// <inheritdoc />
     public async ValueTask<JobId> ContinueWithAsync<T>(
         JobId parentId, Expression<Func<T, Task>> call, EnqueueOptions? options = null, CancellationToken ct = default)
         where T : class
@@ -54,6 +63,14 @@ public sealed class JobClient(
         return ids[0];
     }
 
+    /// <inheritdoc />
+    /// <exception cref="ArgumentException">
+    /// <paramref name="recurringId"/> is empty; or <paramref name="options"/> carries an
+    /// <see cref="EnqueueOptions.IdempotencyKey"/>, which the recurring id already serves as; or
+    /// <paramref name="cron"/> parses but never fires. The last is checked here rather than left to
+    /// the scheduler, because a definition that can never produce an occurrence is silent at exactly
+    /// the moment its author is watching for the first run.
+    /// </exception>
     public ValueTask UpsertRecurringAsync<T>(
         string recurringId, string cron, Expression<Func<T, Task>> call,
         EnqueueOptions? options = null, CancellationToken ct = default)
@@ -88,15 +105,29 @@ public sealed class JobClient(
         return storage.UpsertRecurringAsync(record, ct);
     }
 
+    /// <inheritdoc />
     public ValueTask RemoveRecurringAsync(string recurringId, CancellationToken ct = default)
         => storage.RemoveRecurringAsync(recurringId, ct);
 
+    /// <inheritdoc />
     public ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default)
         => storage.TryCancelAsync(id, ct);
 
+    /// <inheritdoc />
     public ValueTask<bool> RunNowAsync(JobId id, CancellationToken ct = default)
         => storage.TryRunNowAsync(id, ct);
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// An empty batch is a no-op returning an empty list, not an error — a fan-out over an empty
+    /// collection is ordinary, and a round trip to insert nothing would be waste.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// Two jobs in <paramref name="batch"/> share an idempotency key. Keys are unique among active
+    /// jobs, so the second would silently resolve to the first. Rejected here rather than at the
+    /// database, where the storage contract leaves it to the provider — left alone, the same batch
+    /// would deduplicate on one engine and violate a unique index on another.
+    /// </exception>
     public ValueTask<IReadOnlyList<JobId>> EnqueueBatchAsync(JobBatch batch, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(batch);
@@ -136,6 +167,13 @@ public sealed class JobClient(
         return storage.EnqueueAsync(records, ct);
     }
 
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">
+    /// The job has not finished — it is still scheduled, queued or running. Requeueing it would
+    /// duplicate work that is already in flight, and the caller who wanted it stopped wanted
+    /// <see cref="CancelAsync"/>. <see cref="JobState.Failed"/> is allowed alongside the terminal
+    /// states: a job waiting out a retry has finished an attempt, not its life.
+    /// </exception>
     public async ValueTask<JobId?> RequeueAsync(JobId id, CancellationToken ct = default)
     {
         var original = await storage.GetJobAsync(id, ct).ConfigureAwait(false);
@@ -180,6 +218,8 @@ public sealed class JobClient(
         return ids[0];
     }
 
+    /// <inheritdoc />
+    /// <exception cref="ArgumentException"><paramref name="recurringId"/> is empty.</exception>
     public async ValueTask<bool> TriggerRecurringAsync(string recurringId, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(recurringId);

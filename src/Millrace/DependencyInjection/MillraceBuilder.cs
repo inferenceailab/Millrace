@@ -14,8 +14,24 @@ namespace Millrace;
 /// </summary>
 public sealed class MillraceBuilder(IServiceCollection services)
 {
+    /// <summary>The collection being configured.</summary>
+    /// <remarks>
+    /// Exposed because this builder deliberately does not model everything: provider packages
+    /// register through it — <see cref="UseStorage"/> is a thin wrapper over
+    /// <c>Services.Replace</c> — and so does anything a consumer needs that Millrace has no
+    /// shorthand for.
+    /// </remarks>
     public IServiceCollection Services { get; } = services;
 
+    /// <summary>
+    /// Applies <paramref name="configure"/> to this node's <see cref="MillraceOptions"/>.
+    /// </summary>
+    /// <remarks>
+    /// Additive like any other options callback — calling it twice runs both in order rather than
+    /// the second replacing the first. What it sets is per-node, and nodes in one deployment may
+    /// legitimately disagree: parallelism and claimed queues are local decisions.
+    /// <see cref="MillraceOptions.WorkflowQueue"/> is the exception they must agree on.
+    /// </remarks>
     public MillraceBuilder Configure(Action<MillraceOptions> configure)
     {
         Services.Configure(configure);

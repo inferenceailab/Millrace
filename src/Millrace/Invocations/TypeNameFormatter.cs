@@ -12,6 +12,16 @@ namespace Millrace.Invocations;
 /// </summary>
 public static class TypeNameFormatter
 {
+    /// <summary>
+    /// Renders a version-free reference to <paramref name="type"/>.
+    /// </summary>
+    /// <remarks>
+    /// The result is a persisted identifier, not a display string — it is written into job records
+    /// and read back by a different process, usually after at least one redeploy. Version, culture
+    /// and public key token are dropped at every level so a package bump does not orphan in-flight
+    /// jobs; namespace, type name and assembly simple name are all load-bearing, which is the
+    /// reason renaming a type that queued jobs still refer to is a breaking deploy.
+    /// </remarks>
     public static string Format(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -21,6 +31,15 @@ public static class TypeNameFormatter
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Loads the type a stored reference names, reversing <see cref="Format"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The type cannot be loaded — renamed, moved to another assembly, or living in one this
+    /// process never loads. The underlying failure is wrapped rather than surfaced raw because it
+    /// names only the string it was handed, while the fact worth reporting is that a deploy moved a
+    /// type out from under jobs that were already queued against it.
+    /// </exception>
     public static Type Resolve(string typeName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(typeName);

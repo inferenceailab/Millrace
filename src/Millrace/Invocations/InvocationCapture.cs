@@ -13,6 +13,36 @@ namespace Millrace.Invocations;
 /// </summary>
 public static class InvocationCapture
 {
+    /// <summary>
+    /// Captures a call expression into the form a worker can replay later, in another process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Arguments are evaluated here, at enqueue time, and stored as JSON — the job carries values,
+    /// never the closure that produced them. That is the whole reason for the "pass ids, not
+    /// entities" guidance: whatever is captured is what runs, however stale it has become by the
+    /// time it does.
+    /// </para>
+    /// <para>
+    /// The call shapes 0.1 does not support are rejected here rather than at execution. The same
+    /// mistake caught later would surface minutes afterwards, in a different process, as a failing
+    /// job rather than a failing enqueue — so the check is worth doing while the caller is still on
+    /// the stack.
+    /// </para>
+    /// <para>
+    /// A <see cref="CancellationToken"/> parameter is captured as a placeholder and filled in with
+    /// the job's execution token at invoke time; whatever token the enqueuing code held is not the
+    /// one that should cancel the work.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="call"/> is not a single instance method call made directly on the service
+    /// parameter, or one of its arguments reads that parameter — which cannot work, since the
+    /// service instance does not exist until the job runs.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The method is generic, returns <see cref="ValueTask"/>, or has a ref, in or out parameter.
+    /// </exception>
     public static JobInvocation Capture<T>(Expression<Func<T, Task>> call, JsonSerializerOptions json)
         where T : class
     {
