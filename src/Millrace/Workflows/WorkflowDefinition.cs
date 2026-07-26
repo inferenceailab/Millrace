@@ -15,10 +15,19 @@ public abstract class WorkflowDefinition
         Graph = graph;
     }
 
+    /// <summary>Identity of the workflow this defines.</summary>
     public string Id { get; }
 
+    /// <summary>Version of this definition; with <see cref="Id"/> it is the registry key.</summary>
     public int Version { get; }
 
+    /// <summary>The <c>TData</c> this workflow carries.</summary>
+    /// <remarks>
+    /// Kept as a <see cref="Type"/> because a compiled definition is handled without knowing its
+    /// data type statically — the engine deserializes an instance's stored document against this.
+    /// It is also the part of a definition that cannot be exported: the graph shape serializes,
+    /// a type binding does not.
+    /// </remarks>
     public Type DataType { get; }
 
     /// <summary>The serializable shape — what the dashboard renders and a designer would edit.</summary>

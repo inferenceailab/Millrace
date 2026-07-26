@@ -13,6 +13,16 @@ public sealed class WorkflowRegistry
     private readonly Dictionary<(string Id, int Version), WorkflowDefinition> _definitions;
     private readonly Dictionary<string, int> _latest;
 
+    /// <summary>Builds the registry from every definition registered with the container.</summary>
+    /// <remarks>
+    /// Also where a duplicate <c>(Id, Version)</c> is caught. That is a startup failure rather than
+    /// a last-one-wins merge, because two definitions claiming one key means an instance pinned to
+    /// that version could resume into either — and which one it got would depend on registration
+    /// order.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Two definitions share an <c>(Id, Version)</c>.
+    /// </exception>
     public WorkflowRegistry(IEnumerable<WorkflowDefinition> definitions)
     {
         ArgumentNullException.ThrowIfNull(definitions);
@@ -37,6 +47,11 @@ public sealed class WorkflowRegistry
         }
     }
 
+    /// <summary>Every registered definition, all versions of all workflows.</summary>
+    /// <remarks>
+    /// Includes superseded versions, which are registered precisely because instances still
+    /// running are pinned to them — so this is not a list of what is current.
+    /// </remarks>
     public IReadOnlyCollection<WorkflowDefinition> Definitions => _definitions.Values;
 
     /// <summary>The exact version an in-flight instance is pinned to.</summary>
