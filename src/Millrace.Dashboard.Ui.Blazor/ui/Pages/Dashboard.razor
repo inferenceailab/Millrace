@@ -1,0 +1,137 @@
+@page "/"
+@inject DashboardClient Api
+
+<h1>Millrace</h1>
+
+@if (_error is not null)
+{
+    <p class="error">@_error</p>
+}
+
+<section>
+    <h2>Jobs</h2>
+    @if (_stats is not null)
+    {
+        <p>
+            @foreach (var (state, count) in _stats.JobsByState)
+            {
+                <span>@state @count · </span>
+            }
+            @_stats.RecurringDefinitions schedules
+        </p>
+    }
+
+    <table>
+        <thead>
+            <tr><th>Job</th><th>Queue</th><th>State</th><th>Attempts</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var job in _jobs)
+            {
+                <tr>
+                    <td>@job.TypeName.@job.MethodName</td>
+                    <td>@job.Queue</td>
+                    <td>@job.State</td>
+                    <td>@job.Attempt (@job.Failures failed)</td>
+                    <td>
+                        @* Every management action the contract carries. §11.22 exists because the
+                           React UI once shipped without any of them. *@
+                        <button @onclick="() => Run(Api.CancelAsync(job.Id))">Cancel</button>
+                        <button @onclick="() => Run(Api.RequeueAsync(job.Id))">Requeue</button>
+                        <button @onclick="() => Run(Api.RunNowAsync(job.Id))">Run now</button>
+                        <button @onclick="() => Details(job.Id)">Details</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@if (_details is not null)
+{
+    <section>
+        <h2>@_details.Summary.TypeName.@_details.Summary.MethodName</h2>
+        <p>@_details.Summary.State · attempt @_details.Summary.Attempt</p>
+        @if (_details.LastError is not null)
+        {
+            <pre>@_details.LastError</pre>
+        }
+        <ol>
+            @foreach (var attempt in _details.Attempts)
+            {
+                <li>#@attempt.Attempt @attempt.Outcome @attempt.RecordedAt — @attempt.Error</li>
+            }
+        </ol>
+    </section>
+}
+
+<section>
+    <h2>Workflows</h2>
+    <ul>
+        @foreach (var instance in _instances)
+        {
+            <li>
+                @instance.DefinitionId v@instance.DefinitionVersion — @instance.State
+                @if (instance.State == WorkflowInstanceState.Suspended)
+                {
+                    @* §11.30: a suspended unwind is a pause, and this is the way out of it. *@
+                    <button @onclick='() => Resolve(instance.Id, "retry")'>Retry</button>
+                    <button @onclick='() => Resolve(instance.Id, "skip")'>Skip</button>
+                    <button @onclick='() => Resolve(instance.Id, "abandon")'>Abandon</button>
+                }
+            </li>
+        }
+    </ul>
+</section>
+
+<section>
+    <h2>Schedules</h2>
+    <ul>
+        @foreach (var recurring in _recurring)
+        {
+            <li>
+                @recurring.Id (@recurring.Cron) — next @recurring.NextFireTime, last @recurring.LastOutcome
+                <button @onclick="() => Run(Api.TriggerRecurringAsync(recurring.Id))">Trigger</button>
+            </li>
+        }
+    </ul>
+</section>
+
+@code {
+    private IReadOnlyList<JobSummary> _jobs = [];
+    private IReadOnlyList<WorkflowInstanceSummary> _instances = [];
+    private IReadOnlyList<RecurringSummary> _recurring = [];
+    private JobStatistics? _stats;
+    private JobDetails? _details;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => Reload();
+
+    private async Task Reload()
+    {
+        try
+        {
+            _error = null;
+            _stats = await Api.GetStatisticsAsync();
+            _jobs = (await Api.GetJobsAsync(state: null))?.Items ?? [];
+            _instances = (await Api.GetInstancesAsync())?.Items ?? [];
+            _recurring = (await Api.GetRecurringAsync())?.Items ?? [];
+        }
+        catch (HttpRequestException e)
+        {
+            // The dashboard is the thing an operator opens when something is already wrong, so a
+            // failed read says so rather than rendering an empty table that reads as "no jobs".
+            _error = e.Message;
+        }
+    }
+
+    private async Task Details(JobId id) => _details = await Api.GetJobAsync(id);
+
+    private Task Resolve(WorkflowInstanceId id, string action) => Run(Api.ResolveCompensationAsync(id, action));
+
+    private async Task Run(Task<HttpResponseMessage> action)
+    {
+        using var response = await action;
+        await Reload();
+    }
+}

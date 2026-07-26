@@ -1,4 +1,5 @@
 using Millrace.Dashboard.Ui.Angular;
+using Millrace.Dashboard.Ui.Blazor;
 using Millrace.Dashboard.Ui.React;
 using Xunit;
 
@@ -48,6 +49,7 @@ public sealed class UiPackagingTests
     {
         { "React", typeof(ReactDashboardUi) },
         { "Angular", typeof(AngularDashboardUi) },
+        { "Blazor", typeof(BlazorDashboardUi) },
     };
 
     [Theory]

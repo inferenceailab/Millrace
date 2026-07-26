@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Official Blazor UI for the Millrace dashboard: a prebuilt WebAssembly bundle embedded in the package, so consumers never build it. Renders against the C# contract types directly rather than a mirror of them.</Description>
+    <UiRoot>$(MSBuildProjectDirectory)/ui</UiRoot>
+    <UiDist>$(UiRoot)/publish/wwwroot</UiDist>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The dashboard test project asserts contract parity against this bundle. -->
+    <InternalsVisibleTo Include="Millrace.Dashboard.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Millrace.Dashboard\Millrace.Dashboard.csproj" />
+  </ItemGroup>
+
+  <!--
+    Publish rather than build: a Blazor WebAssembly app only produces its runtime payload on
+    publish, so the React and Angular projects' "run the bundler" step is "run dotnet publish" here.
+    Skip with -p:SkipUiBuild=true, exactly as they do.
+
+    The app is deliberately not in Millrace.slnx. It is built through this target and nowhere else,
+    so a solution build cannot start it a second time concurrently, and its output cannot go stale
+    relative to the package that embeds it.
+  -->
+  <Target Name="BuildBlazorUi" BeforeTargets="BeforeBuild" Condition="'$(SkipUiBuild)' != 'true'">
+    <Exec Command="dotnet publish &quot;$(UiRoot)/Millrace.Dashboard.Ui.Blazor.App.csproj&quot; -c Release -o &quot;$(UiRoot)/publish&quot;" />
+  </Target>
+
+  <!--
+    Embed the published bundle. Same shape as the React and Angular packages: collect first, then
+    embed in a second item, because referencing %(RecursiveDir) of the item being created in its own
+    metadata does not batch.
+  -->
+  <Target Name="EmbedBlazorUi" BeforeTargets="PrepareForBuild" DependsOnTargets="BuildBlazorUi">
+    <ItemGroup>
+      <UiAsset Include="$(UiDist)/**/*.*" />
+      <EmbeddedResource Include="@(UiAsset)"
+                        LogicalName="ui/%(UiAsset.RecursiveDir)%(UiAsset.Filename)%(UiAsset.Extension)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <None Remove="ui/bin/**" />
+    <None Remove="ui/obj/**" />
+    <None Remove="ui/publish/**" />
+    <!--
+      ui/ is the WebAssembly application, compiled by its own project. Without this the SDK's default
+      **/*.cs glob would compile its sources into the package as well — the same hole that put
+      node-gyp's Find-VisualStudio.cs into the Angular assembly, and here the files really are C#.
+    -->
+    <Compile Remove="ui/**/*.cs" />
+  </ItemGroup>
+
+</Project>

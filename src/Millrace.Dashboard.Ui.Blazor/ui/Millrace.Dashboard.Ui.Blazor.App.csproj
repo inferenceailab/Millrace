@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      This is an application, not API. Razor generates public component classes, so leaving
+      documentation generation on would demand XML comments on every one of them (§11.34) for a
+      surface no consumer ever references.
+    -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!--
+      Drops the ICU data, which is 2.5 MB of the payload (§11.36). The dashboard renders timestamps
+      and counts; it has no culture-sensitive behaviour to lose.
+    -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      Nothing serves the compressed copies: the dashboard middleware reads an embedded resource and
+      writes it, with no content negotiation. Left on, they are 8 MB of files that can never be read.
+    -->
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+  </ItemGroup>
+
+  <!--
+    The contract types, rather than a hand-written copy of them (§11.23). This is what makes the
+    Blazor UI worth having as native Blazor: the other two UIs mirror these types in TypeScript and
+    can drift from them; this one cannot, because a contract change stops it compiling.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Millrace\Millrace.csproj" />
+  </ItemGroup>
+
+  <!--
+    Linked rather than copied. §11.21 shares the stylesheet across the UIs precisely so there is one
+    of it; a copy in this tree would be a second that nothing keeps in step — the same cost §11.23
+    rejected the web-component approach for.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\ui-shared\millrace.css" Link="wwwroot\millrace.css" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
