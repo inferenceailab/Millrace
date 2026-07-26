@@ -9,19 +9,12 @@ what needs a human, what will bite you, and what the last session learned the ha
 
 Delete anything that stops being true.
 
-## Two things waiting on a person
+## One thing waiting on a person
 
 **`NUGET_API_KEY` is not configured.** `.github/workflows/release.yml` packs, smoke-tests and
 publishes on a `v*` tag, and it has never run against a real tag. Without the secret it fails with a
 clear message rather than silently skipping — deliberate — but that means the first release will
 fail until the secret exists. Deferred on purpose; nothing else depends on it.
-
-**The development machine's Node is below the build floor.** It was v24.14.1, one patch under the
-24.15.0 the Angular CLI requires, so `dotnet build` cannot compile the Angular bundle there. Three
-separate changes last session had to ship with "CI verifies this, not me", because the parity check
-(§11.22) reads the built bundle and it was stale locally. Upgrading Node is a five-minute fix and
-worth doing before [#47](https://github.com/inferenceailab/Millrace/issues/47) adds a third UI
-bundle to the same build.
 
 ## What 1.0 still needs
 
@@ -33,7 +26,7 @@ Detail is in the issues; the ordering argument is not.
 | [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. |
 | [#49](https://github.com/inferenceailab/Millrace/issues/49) Benchmarks | Positioning against Hangfire and WorkflowCore. Nothing depends on it. |
 | [#77](https://github.com/inferenceailab/Millrace/issues/77) Nested sagas | **Design already settled** in §11.29 — inner unwinds first, then propagates outward. Implementation only. Two consequences recorded there: compensation becomes a *stack* rather than a list, and a failed inner compensation must suspend the whole instance. |
-| [#99](https://github.com/inferenceailab/Millrace/issues/99) Documentation | 164 public members have no XML comment. `CS1591` is suppressed in `Directory.Build.props`; **that suppression is the deliverable to delete.** Do it per area, not in one pass — 164 comments written at once become 164 restatements of the method name. |
+| [#99](https://github.com/inferenceailab/Millrace/issues/99) Documentation | The issue's figure of 164 was only ever the core package at one moment; across the solution it was 404, and 52 of those turned out to be a third-party file compiled by mistake ([#104](https://github.com/inferenceailab/Millrace/pull/104)). `CS1591` is suppressed in `Directory.Build.props`; **that suppression is the deliverable to delete**, and it cannot go until every project is clean. Core is nearly done. `Millrace.Storage.Verification` is the largest block left and **nobody has decided whether its conformance suites should be documented at all** — it ships for provider authors, so it is either public API or scaffolding, and that call decides ~128 members. Keep doing it per area; comments written in bulk become restatements of the method name. |
 
 ## Things that will bite you
 
@@ -57,6 +50,18 @@ blaming CI.
 this twice: polling too tightly starves the worker through the storage lock, and polling without
 advancing the fake clock means the worker never wakes at all. `Eventually.ObservedAsync` in
 `test/Millrace.Tests/Workflows/` exists for this — advance the clock inside the predicate.
+
+**A suppression hides more than what it was added for.** `CS1591` was suppressed so packaging could
+proceed, and it swallowed 52 warnings that were not about missing documentation at all: the SDK's
+default `**/*.cs` glob had been reaching into `node_modules`, compiling node-gyp's
+`Find-VisualStudio.cs`, and shipping eleven public COM interop types in the Angular package. It
+built cleanly, the bundle worked, and nothing else could see it. Both UI projects had already
+excluded `node_modules` from `None` items, which is what made the gap look closed.
+
+Two habits fall out. Before trusting a count that justifies a suppression, re-measure it — the
+number in #99 was the core package only, and the real one was two and a half times larger. And when
+a suppression finally comes out, read what it was hiding rather than assuming it was all the thing
+named on the tin.
 
 ## What earned its keep
 
