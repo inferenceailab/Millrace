@@ -22,12 +22,27 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
     private readonly List<Listener> _listeners = [];
     private long _sequence;
 
+    /// <summary>Creates an empty store.</summary>
+    /// <remarks>
+    /// <paramref name="time"/> defaults to <see cref="TimeProvider.System"/>. Every lease expiry,
+    /// due check and claim in here reads through it and nothing reads the clock any other way —
+    /// which is what lets a test advance an hour rather than wait one, and why the conformance
+    /// suite can make time-travel assertions at all.
+    /// </remarks>
     public InMemoryStorage(TimeProvider? time = null) => _time = time ?? TimeProvider.System;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Advertises <see cref="StorageCapabilities.Notifications"/>, delivering wakeups in-process
+    /// through <see cref="ListenAsync"/>. Worth implementing rather than leaving to polling: it
+    /// means the notification path is exercised by every development run and every test, instead of
+    /// only by the providers that have a database behind them.
+    /// </remarks>
     public StorageCapabilities Capabilities => StorageCapabilities.Notifications;
 
     // ---------------------------------------------------------------- IJobStorage
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<JobId>> EnqueueAsync(IReadOnlyList<JobRecord> jobs, CancellationToken ct)
     {
         List<string> wakeups;
@@ -55,6 +70,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.FromResult<IReadOnlyList<JobId>>(ids);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<JobRecord>> ClaimAsync(ClaimRequest request, CancellationToken ct)
     {
         var now = _time.GetUtcNow();
@@ -107,6 +123,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
             || (job.State == JobState.Processing && job.LeaseUntil is { } lease && lease <= now);
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<JobId>> RenewLeasesAsync(
         string workerId, IReadOnlyList<JobId> jobs, TimeSpan lease, CancellationToken ct)
     {
@@ -138,6 +155,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.FromResult<IReadOnlyList<JobId>>(renewed);
     }
 
+    /// <inheritdoc />
     public ValueTask<bool> ApplyAsync(JobTransition transition, CancellationToken ct)
     {
         List<string> wakeups;
@@ -196,6 +214,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.FromResult(true);
     }
 
+    /// <inheritdoc />
     public ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
     {
         List<string> wakeups;
@@ -217,6 +236,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.FromResult(true);
     }
 
+    /// <inheritdoc />
     public ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
     {
         lock (_gate)
@@ -248,6 +268,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<JobRecord?> GetJobAsync(JobId id, CancellationToken ct)
     {
         lock (_gate)
@@ -256,6 +277,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<int> ActivateDueJobsAsync(DateTimeOffset now, int batchSize, CancellationToken ct)
     {
         List<string> wakeups = [];
@@ -284,6 +306,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.FromResult(activated);
     }
 
+    /// <inheritdoc />
     public ValueTask UpsertRecurringAsync(RecurringJobRecord record, CancellationToken ct)
     {
         lock (_gate)
@@ -308,6 +331,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc />
     public ValueTask<RecurringJobRecord?> GetRecurringAsync(string id, CancellationToken ct)
     {
         lock (_gate)
@@ -316,6 +340,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         }
     }
 
+    /// <inheritdoc />
     public ValueTask RemoveRecurringAsync(string id, CancellationToken ct)
     {
         lock (_gate)
@@ -326,6 +351,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc />
     public ValueTask<IReadOnlyList<RecurringJobRecord>> GetDueRecurringAsync(
         DateTimeOffset now, int batchSize, CancellationToken ct)
     {
@@ -341,6 +367,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<bool> TryFireRecurringAsync(
         string id, DateTimeOffset expectedFireTime, DateTimeOffset nextFireTime,
         JobRecord job, CancellationToken ct)
@@ -380,6 +407,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
 
     // ---------------------------------------------------------------- IWorkflowStorage
 
+    /// <inheritdoc />
     public ValueTask CreateInstanceAsync(WorkflowInstanceRecord instance, CancellationToken ct)
     {
         lock (_gate)
@@ -394,6 +422,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc />
     public ValueTask<WorkflowInstanceRecord?> GetInstanceAsync(WorkflowInstanceId id, CancellationToken ct)
     {
         lock (_gate)
@@ -402,6 +431,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         }
     }
 
+    /// <inheritdoc />
     public ValueTask UpdateInstanceAsync(
         WorkflowInstanceRecord instance, long expectedRevision, CancellationToken ct)
     {
@@ -441,6 +471,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         undo?.Add(() => _instances[instance.Id] = stored);
     }
 
+    /// <inheritdoc />
     public ValueTask AddBookmarkAsync(BookmarkRecord bookmark, CancellationToken ct)
     {
         lock (_gate)
@@ -451,6 +482,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.CompletedTask;
     }
 
+    /// <inheritdoc />
     public ValueTask<BookmarkRecord?> ConsumeBookmarkAsync(
         string signalName, string correlationId, CancellationToken ct)
     {
@@ -488,6 +520,7 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
 
     // ---------------------------------------------------------------- IStorageNotifier
 
+    /// <inheritdoc />
     public async IAsyncEnumerable<QueueSignal> ListenAsync(
         IReadOnlySet<string> queues, [EnumeratorCancellation] CancellationToken ct)
     {

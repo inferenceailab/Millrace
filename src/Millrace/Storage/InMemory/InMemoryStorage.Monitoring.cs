@@ -12,6 +12,7 @@ namespace Millrace.Storage.InMemory;
 /// </remarks>
 public sealed partial class InMemoryStorage
 {
+    /// <inheritdoc />
     public ValueTask<JobStatistics> GetStatisticsAsync(TenantFilter tenant, CancellationToken ct)
     {
         var now = _time.GetUtcNow();
@@ -52,6 +53,7 @@ public sealed partial class InMemoryStorage
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<Page<JobSummary>> QueryJobsAsync(JobQuery query, CancellationToken ct)
     {
         var limit = ClampLimit(query.Limit, JobQuery.DefaultLimit, JobQuery.MaxLimit);
@@ -73,6 +75,7 @@ public sealed partial class InMemoryStorage
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<Page<WorkflowInstanceSummary>> QueryInstancesAsync(InstanceQuery query, CancellationToken ct)
     {
         var limit = ClampLimit(query.Limit, InstanceQuery.DefaultLimit, InstanceQuery.MaxLimit);
@@ -96,6 +99,7 @@ public sealed partial class InMemoryStorage
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<Page<RecurringSummary>> QueryRecurringAsync(RecurringQuery query, CancellationToken ct)
     {
         var limit = ClampLimit(query.Limit, RecurringQuery.DefaultLimit, RecurringQuery.MaxLimit);
@@ -129,6 +133,7 @@ public sealed partial class InMemoryStorage
         }
     }
 
+    /// <inheritdoc />
     public ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct)
     {
         lock (_gate)
