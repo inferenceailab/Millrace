@@ -9,6 +9,12 @@ public interface IWorkflowStorage
     /// <summary>Stores a new instance with <c>Revision = 1</c>; duplicate id throws <see cref="MillraceConcurrencyException"/>.</summary>
     ValueTask CreateInstanceAsync(WorkflowInstanceRecord instance, CancellationToken ct);
 
+    /// <summary>Reads one instance, or null if it does not exist.</summary>
+    /// <remarks>
+    /// The read half of the optimistic-concurrency loop: callers take the record, merge into it,
+    /// and hand its <see cref="WorkflowInstanceRecord.Revision"/> back to
+    /// <see cref="UpdateInstanceAsync"/>, which is what detects that someone else got there first.
+    /// </remarks>
     ValueTask<WorkflowInstanceRecord?> GetInstanceAsync(WorkflowInstanceId id, CancellationToken ct);
 
     /// <summary>
@@ -19,6 +25,13 @@ public interface IWorkflowStorage
     /// </summary>
     ValueTask UpdateInstanceAsync(WorkflowInstanceRecord instance, long expectedRevision, CancellationToken ct);
 
+    /// <summary>Records that an instance is waiting for a signal.</summary>
+    /// <remarks>
+    /// Standalone here, but the engine does not use it that way — a wait has to appear in the same
+    /// atom as the cursor that describes where it resumes, which is why
+    /// <see cref="JobTransition.Bookmarks"/> exists. Inserted separately, a bookmark can outlive a
+    /// rolled-back checkpoint and wake an instance into a position it never reached.
+    /// </remarks>
     ValueTask AddBookmarkAsync(BookmarkRecord bookmark, CancellationToken ct);
 
     /// <summary>

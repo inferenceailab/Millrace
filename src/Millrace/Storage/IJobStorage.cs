@@ -18,6 +18,12 @@ namespace Millrace.Storage;
 /// </remarks>
 public interface IJobStorage
 {
+    /// <summary>Optional powers this provider offers, which the engine adapts to.</summary>
+    /// <remarks>
+    /// Declared rather than probed, and read once — a provider that advertises a capability is
+    /// expected to keep offering it for the lifetime of the process, because the engine wires
+    /// itself differently depending on the answer rather than re-checking per operation.
+    /// </remarks>
     StorageCapabilities Capabilities { get; }
 
     /// <summary>
@@ -143,6 +149,12 @@ public interface IJobStorage
     /// </remarks>
     ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct);
 
+    /// <summary>Reads one job, or null if no such job exists.</summary>
+    /// <remarks>
+    /// A plain read with no fencing and no lock: the record it returns is a snapshot that may be
+    /// stale the moment it arrives. Anything acting on it must go through a fenced operation rather
+    /// than trusting what it saw here.
+    /// </remarks>
     ValueTask<JobRecord?> GetJobAsync(JobId id, CancellationToken ct);
 
     /// <summary>
@@ -164,8 +176,15 @@ public interface IJobStorage
     /// </summary>
     ValueTask UpsertRecurringAsync(RecurringJobRecord record, CancellationToken ct);
 
+    /// <summary>Reads one recurring definition, or null if none is registered under that id.</summary>
     ValueTask<RecurringJobRecord?> GetRecurringAsync(string id, CancellationToken ct);
 
+    /// <summary>Removes a recurring definition.</summary>
+    /// <remarks>
+    /// The definition only. Jobs it already fired are ordinary jobs by then and are left alone,
+    /// keeping the <see cref="JobRecord.RecurringId"/> that names it — the link is provenance, so a
+    /// removed schedule leaves a readable history rather than dangling references or a cascade.
+    /// </remarks>
     ValueTask RemoveRecurringAsync(string id, CancellationToken ct);
 
     /// <summary>

@@ -12,5 +12,12 @@ public readonly record struct QueueSignal(string Queue);
 /// </summary>
 public interface IStorageNotifier
 {
+    /// <summary>Streams wakeup hints for <paramref name="queues"/> until cancelled.</summary>
+    /// <remarks>
+    /// A latency optimisation and nothing more. Signals may be dropped, duplicated, or arrive for a
+    /// queue with nothing claimable — a worker treats each as "look now", never as "there is work".
+    /// A provider whose channel drops every signal is still correct; its workers just fall back to
+    /// the poll interval.
+    /// </remarks>
     IAsyncEnumerable<QueueSignal> ListenAsync(IReadOnlySet<string> queues, CancellationToken ct);
 }

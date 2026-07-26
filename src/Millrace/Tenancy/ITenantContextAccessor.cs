@@ -24,8 +24,14 @@ public sealed class AmbientTenantContextAccessor : ITenantContextAccessor
 {
     private static readonly AsyncLocal<string?> Current = new();
 
+    /// <inheritdoc />
     public string? TenantId => Current.Value;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Scopes nest: disposing restores the value that was ambient before, rather than clearing it,
+    /// so a worker that begins a scope inside an existing one leaves the outer tenant intact.
+    /// </remarks>
     public IDisposable BeginScope(string? tenantId)
     {
         var previous = Current.Value;

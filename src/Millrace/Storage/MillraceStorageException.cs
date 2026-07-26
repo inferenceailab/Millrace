@@ -9,11 +9,13 @@ namespace Millrace.Storage;
 /// </summary>
 public class MillraceStorageException : Exception
 {
+    /// <summary>Creates the exception with a message describing the violation.</summary>
     public MillraceStorageException(string message)
         : base(message)
     {
     }
 
+    /// <summary>Creates the exception wrapping the underlying provider error.</summary>
     public MillraceStorageException(string message, Exception innerException)
         : base(message, innerException)
     {
@@ -36,5 +38,10 @@ public sealed class MillraceConcurrencyException(string message) : MillraceStora
 public sealed class MillraceParentJobNotFoundException(JobId parentId)
     : MillraceStorageException($"Continuation parent job '{parentId}' does not exist.")
 {
+    /// <summary>The continuation parent that did not resolve.</summary>
+    /// <remarks>
+    /// Carried as a value rather than only inside the message, so a handler can log or reconcile
+    /// against it without parsing prose.
+    /// </remarks>
     public JobId ParentId { get; } = parentId;
 }

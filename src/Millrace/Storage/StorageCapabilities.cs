@@ -8,6 +8,12 @@ namespace Millrace.Storage;
 [Flags]
 public enum StorageCapabilities
 {
+    /// <summary>No optional powers.</summary>
+    /// <remarks>
+    /// Not a deficiency: a provider advertising None is fully conformant and loses no guarantee.
+    /// The engine simply falls back — adaptive polling instead of pushed wakeups — so the
+    /// difference is latency, never correctness.
+    /// </remarks>
     None = 0,
 
     /// <summary>
