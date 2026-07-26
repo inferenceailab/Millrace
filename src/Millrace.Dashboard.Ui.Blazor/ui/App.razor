@@ -1,0 +1,10 @@
+@* The whole app. One route today — the views below are the dashboard's read and management
+   surface, and routing between them is a refinement rather than a contract concern. *@
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" />
+    </Found>
+    <NotFound>
+        <p>Not found.</p>
+    </NotFound>
+</Router>

@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Millrace.Dashboard.Ui.Angular;
+using Millrace.Dashboard.Ui.Blazor;
 using Millrace.Dashboard.Ui.React;
 using Xunit;
 
@@ -64,6 +65,7 @@ public sealed class ContractParityTests
     {
         { "React", typeof(ReactDashboardUi) },
         { "Angular", typeof(AngularDashboardUi) },
+        { "Blazor", typeof(BlazorDashboardUi) },
     };
 
     [Theory]
@@ -104,31 +106,99 @@ public sealed class ContractParityTests
     /// actually happened — an endpoint added and a UI forgotten — and does not pretend to catch more.
     /// </para>
     /// </remarks>
-    private static bool Reaches(string bundle, string route) =>
-        LiteralFragments(route).All(fragment => bundle.Contains(fragment, StringComparison.Ordinal));
+    private static bool Reaches(Bundle bundle, string route) =>
+        LiteralFragments(route).All(bundle.Mentions);
 
     private static IEnumerable<string> LiteralFragments(string route) =>
         Regex.Split(route, @"\{[^}]*\}").Where(fragment => fragment.Length > 1);
 
-    /// <summary>Every JavaScript asset in a UI's embedded bundle, concatenated.</summary>
-    private static string ReadBundle(Type uiType)
+    /// <summary>
+    /// A UI's embedded bundle, in whichever form its routes actually survive into.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For a JavaScript UI that is the scripts, as text. For Blazor it cannot be: its routes are in
+    /// the compiled <c>_framework/*.wasm</c> assemblies, and its JavaScript is the framework loader,
+    /// which mentions no contract endpoint at all. Reading only scripts there would report a bundle
+    /// that reaches nothing — and reading the assemblies as text would find nothing either, because
+    /// .NET string literals are UTF-16.
+    /// </para>
+    /// <para>
+    /// So a fragment is searched as text in the scripts and as UTF-16 bytes in the assemblies. The
+    /// claim is unchanged and still one-directional: a bundle that never mentions an endpoint
+    /// certainly does not call it.
+    /// </para>
+    /// </remarks>
+    private sealed class Bundle
     {
-        var assembly = uiType.Assembly;
-        var scripts = assembly.GetManifestResourceNames()
-            .Where(resource => resource.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        private readonly string _scripts;
+        private readonly IReadOnlyList<byte[]> _assemblies;
 
-        Assert.NotEmpty(scripts);
+        public Bundle(Type uiType)
+        {
+            var assembly = uiType.Assembly;
+            var resources = assembly.GetManifestResourceNames();
 
-        return string.Join(
-            '\n',
-            scripts.Select(resource =>
+            _scripts = string.Join('\n', Read(assembly, resources, ".js").Select(
+                bytes => System.Text.Encoding.UTF8.GetString(bytes)));
+
+            _assemblies = Read(assembly, resources, ".wasm", ".dll");
+
+            // A UI that embedded neither is not a bundle, and every assertion below would pass
+            // vacuously against it.
+            Assert.True(
+                _scripts.Length > 0 || _assemblies.Count > 0,
+                $"{uiType.Name} embeds no scripts and no assemblies.");
+        }
+
+        public bool Mentions(string fragment)
+        {
+            if (_scripts.Contains(fragment, StringComparison.Ordinal))
             {
-                using var stream = assembly.GetManifestResourceStream(resource)!;
-                using var reader = new StreamReader(stream);
-                return reader.ReadToEnd();
-            }));
+                return true;
+            }
+
+            var utf16 = System.Text.Encoding.Unicode.GetBytes(fragment);
+            return _assemblies.Any(bytes => Contains(bytes, utf16));
+        }
+
+        private static List<byte[]> Read(
+            Assembly assembly, string[] resources, params string[] extensions) =>
+            [.. resources
+                .Where(r => extensions.Any(e => r.EndsWith(e, StringComparison.OrdinalIgnoreCase)))
+                .Select(r =>
+                {
+                    using var stream = assembly.GetManifestResourceStream(r)!;
+                    using var buffer = new MemoryStream();
+                    stream.CopyTo(buffer);
+                    return buffer.ToArray();
+                })];
+
+        private static bool Contains(byte[] haystack, byte[] needle)
+        {
+            for (var i = 0; i + needle.Length <= haystack.Length; i++)
+            {
+                var match = true;
+                for (var j = 0; j < needle.Length; j++)
+                {
+                    if (haystack[i + j] != needle[j])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
+
+    private static Bundle ReadBundle(Type uiType) => new(uiType);
 
     [Fact]
     public async Task The_two_uis_agree_on_which_endpoints_they_reach()

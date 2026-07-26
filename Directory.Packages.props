@@ -15,6 +15,13 @@
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.4" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!--
+      Pinned to 10.0.0 to match the Microsoft.Extensions.* line, not to 10.0.10. The newer Blazor
+      packages require Microsoft.Extensions.* >= 10.0.10, and satisfying that would raise the floor
+      on Millrace itself — a consumer-facing change to the core package's dependencies, made for the
+      sake of an optional UI package. The floor belongs to the library, not to its dashboard.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
     <!-- Shipped, not test-only: Millrace.Testing hands consumers a controllable clock. -->
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.7.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
