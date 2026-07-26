@@ -240,6 +240,12 @@ public sealed class MillraceTestHost : IAsyncDisposable
     public ValueTask<TData?> GetDataAsync<TData>(WorkflowInstanceId id, CancellationToken ct = default)
         => Workflows.GetDataAsync<TData>(id, ct);
 
+    /// <summary>Tears down the host and everything it built.</summary>
+    /// <remarks>
+    /// Disposes the underlying service provider, which stops the worker and scheduler. Storage is
+    /// in-memory and goes with it, so each host is an isolated world and tests need no cleanup
+    /// between them.
+    /// </remarks>
     public ValueTask DisposeAsync() => _provider.DisposeAsync();
 }
 
@@ -251,5 +257,10 @@ public sealed class MillraceTestHost : IAsyncDisposable
 public sealed class MillraceJobFailedException(JobRecord job, Exception cause)
     : Exception($"Job {job.Id} ({job.Invocation.TypeName}.{job.Invocation.MethodName}) failed: {cause.Message}", cause)
 {
+    /// <summary>The job that exhausted its retries.</summary>
+    /// <remarks>
+    /// The whole record, not just its id — a test that catches this can assert on the state,
+    /// attempt counts or last error without going back to storage for a job that has already died.
+    /// </remarks>
     public JobRecord Job { get; } = job;
 }

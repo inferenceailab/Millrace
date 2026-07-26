@@ -41,8 +41,21 @@ public abstract class EmbeddedBundleUi(Assembly assembly, string name) : IMillra
         .ToDictionary(
             resource => resource.Replace('\\', '/'), resource => resource, StringComparer.OrdinalIgnoreCase);
 
+    /// <inheritdoc />
     public string Name { get; } = name;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Returns false rather than throwing for anything it will not serve, because a missing asset is
+    /// an ordinary 404 and not an error condition — the caller turns one into the other.
+    /// </para>
+    /// <para>
+    /// A path containing <c>..</c> is refused outright. Embedded resources are a flat namespace, so
+    /// traversal cannot escape anywhere, but a request shaped like an attack should not be answered
+    /// as though it were a typo.
+    /// </para>
+    /// </remarks>
     public bool TryOpenAsset(string relativePath, out Stream content, out string contentType)
     {
         content = Stream.Null;
@@ -70,6 +83,13 @@ public abstract class EmbeddedBundleUi(Assembly assembly, string name) : IMillra
         return true;
     }
 
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">
+    /// The bundle has no <c>ui/index.html</c>, which means the package was built without its UI
+    /// assets — almost always <c>-p:SkipUiBuild=true</c>, or Node missing on the build machine. It
+    /// throws rather than returning null because a dashboard with no entry document cannot degrade
+    /// into anything useful, and the message names the fix.
+    /// </exception>
     public Stream OpenEntryDocument(out string contentType)
     {
         contentType = "text/html; charset=utf-8";
