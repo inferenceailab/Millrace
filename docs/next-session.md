@@ -11,10 +11,12 @@ Delete anything that stops being true.
 
 ## One thing waiting on a person
 
-**`NUGET_API_KEY` is not configured.** `.github/workflows/release.yml` packs, smoke-tests and
-publishes on a `v*` tag, and it has never run against a real tag. Without the secret it fails with a
-clear message rather than silently skipping — deliberate — but that means the first release will
-fail until the secret exists. Deferred on purpose; nothing else depends on it.
+**The Trusted Publishing policy has not been created.** `.github/workflows/release.yml` packs,
+smoke-tests and publishes on a `v*` tag, and it has never run against a real tag. There is no secret
+to add — it authenticates by exchanging a GitHub OIDC token for a one-hour key (§11.33) — but the
+policy has to exist on nuget.org first, under **your username → Trusted Publishing**: repository
+owner `inferenceailab`, repository `Millrace`, workflow file `release.yml`, no environment. Until it
+exists the first release fails at the login step. Deferred on purpose; nothing else depends on it.
 
 ## What 1.0 still needs
 

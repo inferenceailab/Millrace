@@ -9,6 +9,9 @@ on:
 
 permissions:
   contents: write
+  # Lets the job ask GitHub for the OIDC token nuget.org exchanges for a publishing key (§11.33).
+  # Omitting it does not fail loudly — the token request simply returns nothing.
+  id-token: write
 
 jobs:
   publish:
@@ -61,18 +64,23 @@ jobs:
           name: packages
           path: artifacts/*
 
+      # Trusted Publishing (§11.33): nuget.org validates a GitHub OIDC token against a policy naming
+      # this repository and this workflow file, then issues a key valid for one hour and usable once.
+      # There is no stored secret to leak or rotate. Requested here rather than at the top of the job
+      # because the hour starts now, and pack and the smoke test come first.
+      - name: NuGet login (OIDC exchange)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: inferenceailab
+
       - name: Push to NuGet
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          if [ -z "$NUGET_API_KEY" ]; then
-            echo "::error::NUGET_API_KEY is not configured for this repository." && exit 1
-          fi
           # --skip-duplicate so re-running a release that failed halfway is safe: the packages
           # already pushed are accepted rather than failing the whole job.
           dotnet nuget push "artifacts/*.nupkg" \
             --source https://api.nuget.org/v3/index.json \
-            --api-key "$NUGET_API_KEY" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --skip-duplicate
 
       - name: Create the GitHub release
