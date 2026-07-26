@@ -19,6 +19,7 @@ public sealed partial class PostgreSqlStorage
         "id, queue, state, priority, invocation, created_at, due_at, finished_at, " +
         "attempt, failures, tenant_id, worker_id";
 
+    /// <inheritdoc />
     public async ValueTask<JobStatistics> GetStatisticsAsync(TenantFilter tenant, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -82,6 +83,7 @@ public sealed partial class PostgreSqlStorage
         };
     }
 
+    /// <inheritdoc />
     public async ValueTask<Page<JobSummary>> QueryJobsAsync(JobQuery query, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -129,6 +131,7 @@ public sealed partial class PostgreSqlStorage
         return BuildPage(rows, limit, s => (s.CreatedAt, s.Id.Value));
     }
 
+    /// <inheritdoc />
     public async ValueTask<Page<WorkflowInstanceSummary>> QueryInstancesAsync(InstanceQuery query, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -192,6 +195,7 @@ public sealed partial class PostgreSqlStorage
         return BuildPage(rows, limit, s => (s.CreatedAt, s.Id.Value));
     }
 
+    /// <inheritdoc />
     public async ValueTask<Page<RecurringSummary>> QueryRecurringAsync(RecurringQuery query, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
@@ -283,6 +287,7 @@ public sealed partial class PostgreSqlStorage
         return new Page<RecurringSummary> { Items = items, NextCursor = next };
     }
 
+    /// <inheritdoc />
     public async ValueTask<JobDetails?> GetJobDetailsAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
