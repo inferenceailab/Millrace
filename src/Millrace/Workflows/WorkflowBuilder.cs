@@ -227,6 +227,33 @@ internal sealed class WorkflowBuilder<TData> : IWorkflowBuilder<TData>
             state.Nodes[index] = state.Nodes[index] with { OnFailure = policy };
             return this;
         }
+
+        public ISagaBuilder<TData> Saga(Action<ISagaBuilder<TData>> steps, NestedSagaPolicy policy)
+        {
+            ArgumentNullException.ThrowIfNull(steps);
+
+            var id = state.NextId(WorkflowNodeKind.Saga);
+            var inner = new WorkflowBuilder<TData>(state);
+            steps(new SagaBuilder(inner, state));
+
+            if (inner.Entry is null)
+            {
+                throw new ArgumentException("A saga needs at least one step.", nameof(steps));
+            }
+
+            body.Append(new WorkflowNode
+            {
+                Id = id,
+                Kind = WorkflowNodeKind.Saga,
+                Body = inner.Entry,
+                Nesting = policy,
+            });
+
+            // The nested saga is a step of the enclosing one, so a later CompensateWith or OnFailure
+            // annotates it rather than the activity before it.
+            _last = id;
+            return this;
+        }
     }
 
     public IWorkflowBuilder<TData> Delay(TimeSpan duration)
