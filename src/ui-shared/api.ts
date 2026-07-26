@@ -154,6 +154,14 @@ export const api = {
    */
   cancelJob: (id: string) => post(`/jobs/${id}/cancel`).then(() => undefined),
 
+  /**
+   * Runs a job that is waiting out its retry backoff, now.
+   *
+   * Shortens the wait and nothing else — no retry budget is spent. 404 means the job is not
+   * awaiting a retry, which is the ordinary answer for a stale button.
+   */
+  runJobNow: (id: string) => post(`/jobs/${id}/run-now`).then(() => undefined),
+
   /** Runs a finished job again as a new job. 409 means it has not finished — cancel it first. */
   requeueJob: (id: string) => post(`/jobs/${id}/requeue`) as Promise<RequeuedJob>,
 

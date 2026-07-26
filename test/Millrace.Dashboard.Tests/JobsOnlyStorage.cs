@@ -23,6 +23,9 @@ internal sealed class JobsOnlyStorage : IJobStorage
     public ValueTask<bool> ApplyAsync(JobTransition transition, CancellationToken ct)
         => throw new NotSupportedException();
 
+    public ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
+        => throw new NotSupportedException();
+
     public ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
         => throw new NotSupportedException();
 

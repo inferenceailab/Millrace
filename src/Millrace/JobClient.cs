@@ -94,6 +94,9 @@ public sealed class JobClient(
     public ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default)
         => storage.TryCancelAsync(id, ct);
 
+    public ValueTask<bool> RunNowAsync(JobId id, CancellationToken ct = default)
+        => storage.TryRunNowAsync(id, ct);
+
     public ValueTask<IReadOnlyList<JobId>> EnqueueBatchAsync(JobBatch batch, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(batch);

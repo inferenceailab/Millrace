@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api, ApiError } from '../../../ui-shared/api'
-import { isCancellable, isRequeueable, jobStates, type JobState } from '../../../ui-shared/contract'
+import { isCancellable, isRequeueable, isRunnableNow, jobStates, type JobState } from '../../../ui-shared/contract'
 import {
   ErrorNotice,
   Loading,
@@ -246,6 +246,18 @@ export function JobDetail({ id }: { id: string }) {
           }
         >
           Cancel
+        </button>
+        <button
+          type="button"
+          disabled={action.busy || !isRunnableNow(s.state)}
+          onClick={() =>
+            run(async () => {
+              await api.runJobNow(id)
+              return 'Running now.'
+            })
+          }
+        >
+          Run now
         </button>
         <button
           type="button"

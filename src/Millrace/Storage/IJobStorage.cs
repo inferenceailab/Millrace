@@ -120,6 +120,29 @@ public interface IJobStorage
     /// </summary>
     ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct);
 
+    /// <summary>
+    /// Makes a job that is waiting out its retry backoff claimable immediately (§11.32).
+    /// Atomic: <see cref="JobState.Failed"/> ⇒ <see cref="JobState.Enqueued"/> with
+    /// <see cref="JobRecord.DueAt"/> cleared, returning <see langword="true"/>; any other state,
+    /// or unknown, ⇒ <see langword="false"/> with no mutation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Only <see cref="JobState.Failed"/>.</b> That state means "an attempt failed and the next
+    /// one is waiting on a clock", which is the only situation where bringing the job forward is
+    /// well defined. A <see cref="JobState.Scheduled"/> job has never run and its due time is the
+    /// caller's intent rather than a backoff; a <see cref="JobState.Processing"/> one is already
+    /// running; a terminal one needs <c>RequeueAsync</c>, which mints a new job (§11.18).
+    /// </para>
+    /// <para>
+    /// <b>Consumes no retry budget.</b> <see cref="JobRecord.Attempt"/> and
+    /// <see cref="JobRecord.Failures"/> are untouched, because nothing was attempted — only the
+    /// wait was shortened. An operator who fixes the cause and runs the job now must not find it
+    /// dead-lettered a step earlier than it would otherwise have been.
+    /// </para>
+    /// </remarks>
+    ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct);
+
     ValueTask<JobRecord?> GetJobAsync(JobId id, CancellationToken ct);
 
     /// <summary>

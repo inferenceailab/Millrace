@@ -451,6 +451,75 @@ public abstract partial class JobStorageConformanceSuite
     }
 
     [Fact]
+    public async Task Run_now_makes_a_retrying_job_claimable_without_spending_retry_budget()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+        await EnqueueOneAsync(harness.Jobs, Job(time, retry: Retry.Fixed(TimeSpan.FromHours(1), 5)));
+        var claimed = await ClaimOneAsync(harness.Jobs);
+
+        Assert.True(await harness.Jobs.ApplyAsync(
+            Transition(claimed, JobState.Failed, failures: 1, dueAt: time.GetUtcNow().AddHours(1), error: "boom"),
+            CancellationToken.None));
+
+        Assert.True(await harness.Jobs.TryRunNowAsync(claimed.Id, CancellationToken.None));
+
+        var current = (await harness.Jobs.GetJobAsync(claimed.Id, CancellationToken.None))!;
+
+        // Claimable now, without waiting out the hour and without activation having to run.
+        Assert.Equal(JobState.Enqueued, current.State);
+        Assert.Null(current.DueAt);
+
+        // The point of the operation: nothing was attempted, so nothing is spent. An operator who
+        // deploys a fix and runs the job now must not find it dead-lettered a step early (§11.32).
+        Assert.Equal(1, current.Attempt);
+        Assert.Equal(1, current.Failures);
+        Assert.Equal("boom", current.LastError);
+
+        Assert.Equal(claimed.Id, (await ClaimOneAsync(harness.Jobs, "w2")).Id);
+    }
+
+    [Theory]
+    [InlineData(JobState.Scheduled)]
+    [InlineData(JobState.Enqueued)]
+    [InlineData(JobState.Processing)]
+    [InlineData(JobState.Succeeded)]
+    public async Task Run_now_refuses_anything_not_awaiting_a_retry(JobState state)
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+
+        var job = state == JobState.Scheduled
+            ? Job(time) with { State = JobState.Scheduled, DueAt = time.GetUtcNow().AddHours(1) }
+            : Job(time);
+        await EnqueueOneAsync(harness.Jobs, job);
+
+        if (state is JobState.Processing or JobState.Succeeded)
+        {
+            var claimed = await ClaimOneAsync(harness.Jobs);
+            if (state == JobState.Succeeded)
+            {
+                await harness.Jobs.ApplyAsync(
+                    Transition(claimed, JobState.Succeeded), CancellationToken.None);
+            }
+        }
+
+        // A Scheduled job's due time is the caller's intent, not a backoff; a Processing one is
+        // already running; a terminal one needs a requeue, which mints a new job (§11.18). Only
+        // Failed means "waiting on a clock to try again".
+        Assert.False(await harness.Jobs.TryRunNowAsync(job.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Run_now_on_an_unknown_job_reports_false()
+    {
+        var time = NewTime();
+        await using var harness = await CreateHarnessAsync(time);
+
+        Assert.False(await harness.Jobs.TryRunNowAsync(JobId.New(time), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Apply_failed_schedules_retry_and_activation_makes_it_claimable()
     {
         var time = NewTime();

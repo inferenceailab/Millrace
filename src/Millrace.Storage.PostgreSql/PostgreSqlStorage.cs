@@ -421,6 +421,32 @@ public sealed partial class PostgreSqlStorage : IJobStorage, IWorkflowStorage, I
         return true;
     }
 
+    public async ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
+    {
+        await EnsureInitializedAsync(ct).ConfigureAwait(false);
+
+        await using var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using var cmd = conn.CreateCommand();
+
+        // The state predicate is the fence: a job claimed between the operator's click and this
+        // statement is no longer Failed, so it is left alone rather than yanked out from under the
+        // worker running it. Attempt and failures are untouched (§11.32).
+        cmd.CommandText = $"""
+            UPDATE {_schema}.jobs SET state = 1, due_at = NULL
+            WHERE id = @id AND state = 4
+            RETURNING queue
+            """;
+        cmd.Parameters.AddWithValue("id", id.Value);
+
+        if (await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is not string queue)
+        {
+            return false;
+        }
+
+        await NotifyAsync(conn, [queue], ct).ConfigureAwait(false);
+        return true;
+    }
+
     public async ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);

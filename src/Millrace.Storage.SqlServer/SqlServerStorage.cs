@@ -612,6 +612,24 @@ public sealed class SqlServerStorage : IJobStorage, IWorkflowStorage, IMonitorin
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    public async ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
+    {
+        await EnsureInitializedAsync(ct).ConfigureAwait(false);
+        await using var conn = await OpenAsync(ct).ConfigureAwait(false);
+
+        // The state predicate is the fence: a job claimed between the operator's click and this
+        // statement is no longer Failed, so it is left alone rather than yanked out from under the
+        // worker running it. Attempt and failures are untouched (§11.32).
+        await using var cmd = Command(conn, transaction: null,
+            $"""
+             UPDATE {_schema}.jobs SET state = 1, due_at = NULL
+             WHERE id = @id AND state = 4
+             """,
+            ("@id", id.Value));
+
+        return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false) > 0;
+    }
+
     public async ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
     {
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
