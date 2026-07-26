@@ -1,7 +1,11 @@
 # Millrace
 
-> **Status: pre-alpha.** The storage contract, job substrate and PostgreSQL provider are built and
-> green; the workflow engine and dashboard are not. Start with [ARCHITECTURE.md](ARCHITECTURE.md).
+> **Status: alpha.** Everything through phase 0.5 is built and green — jobs, workflows, sagas, both
+> SQL providers, the dashboard and its React and Angular UIs. Phase 1.0 is in progress. The
+> published version is `0.1.0-alpha.1`, and that number is deliberately conservative rather than a
+> phase number: 1.0 is what will promise stability for the storage and REST contracts, so the
+> version stays where it is until that promise is made. Start with
+> [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Millrace** is a durable job and workflow orchestration library for .NET — in-process,
 storage-agnostic, dashboard-included. The mental model: *Hangfire's substrate with a real
@@ -20,14 +24,51 @@ directed, sustained flow that does work.
 |---|---|---|
 | 0.1 | Storage contract, InMemory provider, job substrate, conformance kit | **done** |
 | 0.2 | PostgreSQL provider · dashboard REST API + OpenAPI · React UI (read-only) | **done** |
-| 0.3 | Workflow engine core | not started |
-| 0.4 | Sagas, compensation, versioning, management actions | not started |
-| 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | in progress |
-| 1.0 | Hardening, Blazor UI, docs site, benchmarks | not started |
+| 0.3 | Workflow engine core | **done** |
+| 0.4 | Sagas, compensation, versioning, management actions | **done** |
+| 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | **done** |
+| 1.0 | Hardening, Blazor UI, docs site, benchmarks | in progress |
 
 Planned work lives on the [project board](https://github.com/users/inferenceailab/projects/1),
 mirrored in [docs/backlog.md](docs/backlog.md). Unsettled design questions are tracked in
 [docs/open-questions.md](docs/open-questions.md).
+
+## Install
+
+Everything published so far is a prerelease, so `--prerelease` is required until 1.0.
+
+```bash
+dotnet add package Millrace --prerelease
+dotnet add package Millrace.Storage.PostgreSql --prerelease
+```
+
+```csharp
+builder.Services.AddMillrace(millrace => millrace.UsePostgreSqlStorage(connectionString));
+```
+
+That is a working job substrate: enqueue, retries, cron, continuations, workflows. The dashboard is
+opt-in, and a UI is a separate package again — mount the API without one if you would rather build
+your own client against the REST contract.
+
+```csharp
+builder.Services.AddMillraceDashboard();
+builder.Services.AddMillraceReactUi();   // or AddMillraceAngularUi()
+
+app.MapMillraceDashboard("/millrace");
+```
+
+| Package | For |
+|---|---|
+| `Millrace` | The library. Jobs, workflows, the in-memory provider. No database dependencies. |
+| `Millrace.Storage.PostgreSql` | PostgreSQL provider — `SKIP LOCKED` claims and `LISTEN/NOTIFY` wakeups. |
+| `Millrace.Storage.SqlServer` | SQL Server provider. No push channel, so workers poll. |
+| `Millrace.Dashboard` | The REST + OpenAPI contract and middleware. No UI of its own. |
+| `Millrace.Dashboard.Ui.React` | Prebuilt React bundle, embedded. |
+| `Millrace.Dashboard.Ui.Angular` | Prebuilt Angular bundle, embedded. |
+| `Millrace.Testing` | Deterministic test host — see below. |
+| `Millrace.Storage.Verification` | Conformance kit, for writing your own provider. |
+
+The UI packages ship their bundle prebuilt, so installing one never requires Node, npm or a CDN.
 
 ## Try it
 
