@@ -196,6 +196,27 @@ public sealed partial class InMemoryStorage : IJobStorage, IWorkflowStorage, ISt
         return ValueTask.FromResult(true);
     }
 
+    public ValueTask<bool> TryRunNowAsync(JobId id, CancellationToken ct)
+    {
+        List<string> wakeups;
+
+        lock (_gate)
+        {
+            if (!_jobs.TryGetValue(id, out var entry) || entry.Record.State != JobState.Failed)
+            {
+                return ValueTask.FromResult(false);
+            }
+
+            // Attempt and Failures are untouched: nothing was attempted, only the wait was
+            // shortened (§11.32).
+            entry.Record = entry.Record with { State = JobState.Enqueued, DueAt = null };
+            wakeups = [entry.Record.Queue];
+        }
+
+        Publish(wakeups);
+        return ValueTask.FromResult(true);
+    }
+
     public ValueTask<bool> TryCancelAsync(JobId id, CancellationToken ct)
     {
         lock (_gate)

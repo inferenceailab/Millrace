@@ -48,6 +48,14 @@ export function isCancellable(state: JobState): boolean {
 }
 
 /**
+ * Only a job waiting out its retry backoff can be brought forward. `Scheduled` looks similar and is
+ * not: its due time is the caller's intent rather than a backoff (§11.32).
+ */
+export function isRunnableNow(state: JobState): boolean {
+  return state === 'Failed'
+}
+
+/**
  * Requeue is refused for work still in flight — that is what cancel is for. `Failed` counts as
  * finished here even though it is not terminal, because `RequeueAsync` accepts it (§11.18).
  */

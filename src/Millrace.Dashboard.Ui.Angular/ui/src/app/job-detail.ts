@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { api } from '../../../../ui-shared/api';
-import { isCancellable, isRequeueable } from '../../../../ui-shared/contract';
+import { isCancellable, isRequeueable, isRunnableNow } from '../../../../ui-shared/contract';
 import { asyncSignal, Chip, ErrorNotice, errorMessage, formatTime, Loading } from './shared';
 
 @Component({
@@ -20,6 +20,9 @@ import { asyncSignal, Chip, ErrorNotice, errorMessage, formatTime, Loading } fro
       <div class="controls">
         <button type="button" (click)="cancel()" [disabled]="busy() || !cancellable()">
           Cancel
+        </button>
+        <button type="button" (click)="runNow()" [disabled]="busy() || !runnableNow()">
+          Run now
         </button>
         <button type="button" (click)="requeue()" [disabled]="busy() || !requeueable()">
           Requeue
@@ -152,6 +155,11 @@ export class JobDetail {
     return state !== undefined && isCancellable(state);
   });
 
+  protected readonly runnableNow = computed(() => {
+    const state = this.result().data?.summary.state;
+    return state !== undefined && isRunnableNow(state);
+  });
+
   protected readonly requeueable = computed(() => {
     const state = this.result().data?.summary.state;
     return state !== undefined && isRequeueable(state);
@@ -171,6 +179,13 @@ export class JobDetail {
       // Deliberately not "cancelled": a running job is asked to stop, and the answer does not
       // promise the work did not happen.
       return 'Cancellation requested.';
+    });
+  }
+
+  protected async runNow(): Promise<void> {
+    await this.run(async () => {
+      await api.runJobNow(this.id());
+      return 'Running now.';
     });
   }
 

@@ -58,6 +58,26 @@ public interface IJobClient
     ValueTask<bool> CancelAsync(JobId id, CancellationToken ct = default);
 
     /// <summary>
+    /// Runs a job that is waiting out its retry backoff now, returning whether anything changed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the case a deployed fix creates: the cause is gone at 09:00 and the retry is not due
+    /// until 09:40. This shortens the wait and nothing else — <b>no retry budget is consumed</b>,
+    /// because nothing was attempted (§11.32).
+    /// </para>
+    /// <para>
+    /// Distinct from <see cref="RequeueAsync"/>, which mints a <em>new</em> job. That is right for a
+    /// job that has finished and wrong here: this one has retries left and a history worth keeping.
+    /// </para>
+    /// <para>
+    /// Returns false for anything not awaiting a retry — already running, terminal, or scheduled
+    /// but never yet run — which is the ordinary answer for a stale dashboard button.
+    /// </para>
+    /// </remarks>
+    ValueTask<bool> RunNowAsync(JobId id, CancellationToken ct = default);
+
+    /// <summary>
     /// Fires a recurring definition immediately, without disturbing its schedule.
     /// </summary>
     /// <remarks>

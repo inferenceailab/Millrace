@@ -40,6 +40,14 @@ internal static class ManagementEndpoints
                 + "immutable — and the new job links back to it. Requeueing a job that has not "
                 + "finished is refused with 409.");
 
+        api.MapPost("/jobs/{id:guid}/run-now", RunJobNowAsync)
+            .WithName("RunJobNow")
+            .WithSummary("Runs a job that is waiting out its retry backoff, now.")
+            .WithDescription(
+                "Shortens the wait and nothing else: no retry budget is consumed, because nothing "
+                + "was attempted. 404 means the job is not awaiting a retry — running, terminal, or "
+                + "scheduled but never yet run — which is the ordinary answer for a stale button.");
+
         api.MapPost("/recurring/{id}/trigger", TriggerRecurringAsync)
             .WithName("TriggerRecurring")
             .WithSummary("Fires a recurring definition now, without disturbing its schedule.")
@@ -94,6 +102,10 @@ internal static class ManagementEndpoints
 
     /// <param name="Id">The new job's id.</param>
     private sealed record RequeuedJob(JobId Id);
+
+    private static async Task<Results<Ok, NotFound>> RunJobNowAsync(
+        IJobClient jobs, Guid id, CancellationToken ct)
+        => await jobs.RunNowAsync(new JobId(id), ct) ? TypedResults.Ok() : TypedResults.NotFound();
 
     private static async Task<Results<Ok, NotFound>> TriggerRecurringAsync(
         IJobClient jobs, string id, CancellationToken ct)
