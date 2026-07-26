@@ -43,6 +43,16 @@ public sealed class CronExpression
         _dayOfWeekRestricted = dayOfWeekRestricted;
     }
 
+    /// <summary>Parses a five-field expression: minute, hour, day-of-month, month, day-of-week.</summary>
+    /// <remarks>
+    /// Month and day-of-week accept names as well as numbers, and day-of-week accepts both 0 and 7
+    /// for Sunday — the two spellings fold together, so a schedule written either way behaves
+    /// identically. Everything is UTC; there is no local-time interpretation to get wrong.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="expression"/> is empty.</exception>
+    /// <exception cref="FormatException">
+    /// It does not have exactly five fields, or a field is out of range for its position.
+    /// </exception>
     public static CronExpression Parse(string expression)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(expression);
@@ -73,6 +83,12 @@ public sealed class CronExpression
             dayOfWeekRestricted: fields[4] != "*");
     }
 
+    /// <summary><see cref="Parse"/> without the exception; false and null on anything malformed.</summary>
+    /// <remarks>
+    /// What the scheduler uses, because a stored definition with an unparseable cron must be logged
+    /// and skipped rather than allowed to take down the pass that touches it — one bad definition
+    /// should not stop every other schedule from firing.
+    /// </remarks>
     public static bool TryParse(string expression, out CronExpression? parsed)
     {
         try
@@ -130,6 +146,11 @@ public sealed class CronExpression
         return null;
     }
 
+    /// <summary>The expression exactly as it was given, not a normalized rendering.</summary>
+    /// <remarks>
+    /// Round-trips: what an author wrote is what a dashboard shows and what a re-parse consumes, so
+    /// <c>MON-FRI</c> does not come back as <c>1-5</c> and leave someone wondering what changed it.
+    /// </remarks>
     public override string ToString() => _expression;
 
     private bool DayMatches(DateTime t)
