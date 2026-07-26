@@ -20,11 +20,30 @@ namespace Millrace.Storage;
 /// </remarks>
 public sealed record JobInvocation
 {
+    /// <summary>The service type to resolve from the container when the job runs.</summary>
     public required string TypeName { get; init; }
 
+    /// <summary>Name of the method to invoke on it, matched ordinally.</summary>
+    /// <remarks>
+    /// Not enough to identify the method on its own — overloads are separated by
+    /// <see cref="ParameterTypes"/>.
+    /// </remarks>
     public required string MethodName { get; init; }
 
+    /// <summary>The parameter list, which is what distinguishes one overload from another.</summary>
+    /// <remarks>
+    /// Compared as strings, not as resolved types: each candidate's parameters are rendered the
+    /// same way and matched ordinally. So the rendering itself is part of the persisted contract —
+    /// a change in how a type is formatted would orphan every stored invocation using it, even
+    /// though no application code had changed.
+    /// </remarks>
     public required IReadOnlyList<string> ParameterTypes { get; init; }
 
+    /// <summary>One JSON document per parameter, positionally aligned with them.</summary>
+    /// <remarks>
+    /// <see langword="null"/> at a position means the argument is not carried in the record — a
+    /// <see cref="CancellationToken"/> is the case that arises today, and the worker supplies the
+    /// job's execution token in its place.
+    /// </remarks>
     public required IReadOnlyList<string?> ArgumentsJson { get; init; }
 }

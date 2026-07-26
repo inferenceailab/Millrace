@@ -29,10 +29,23 @@ namespace Millrace.Storage;
 /// </remarks>
 public sealed record JobTransition
 {
+    /// <summary>The job this transition applies to.</summary>
     public required JobId JobId { get; init; }
 
+    /// <summary>The worker the caller believes holds the claim.</summary>
+    /// <remarks>
+    /// Part of the fence described above. A worker whose lease expired and whose job was reclaimed
+    /// elsewhere fails this check and writes nothing, rather than overwriting the outcome recorded
+    /// by whoever holds the job now.
+    /// </remarks>
     public required string ExpectedWorkerId { get; init; }
 
+    /// <summary>The attempt number the caller believes it is completing.</summary>
+    /// <remarks>
+    /// The other half of the fence, and the half that makes it ABA-safe: every claim increments
+    /// <see cref="JobRecord.Attempt"/>, so a worker that lost and then reclaimed the same job is
+    /// still holding a stale number here and cannot apply an outcome computed for the earlier run.
+    /// </remarks>
     public required int ExpectedAttempt { get; init; }
 
     /// <summary>
@@ -49,8 +62,10 @@ public sealed record JobTransition
     /// <summary>Retry activation time when <see cref="TargetState"/> is <see cref="JobState.Failed"/>.</summary>
     public DateTimeOffset? DueAt { get; init; }
 
+    /// <summary>Failure message to record, becoming <see cref="JobRecord.LastError"/>.</summary>
     public string? Error { get; init; }
 
+    /// <summary>Completion time to stamp onto <see cref="JobRecord.FinishedAt"/>.</summary>
     public DateTimeOffset? FinishedAt { get; init; }
 
     /// <summary>Records inserted atomically with the transition (workflow engine, 0.3).</summary>
