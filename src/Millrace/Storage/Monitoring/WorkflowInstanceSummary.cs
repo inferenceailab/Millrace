@@ -11,16 +11,22 @@ namespace Millrace.Storage.Monitoring;
 /// </remarks>
 public sealed record WorkflowInstanceSummary
 {
+    /// <inheritdoc cref="WorkflowInstanceRecord.Id"/>
     public required WorkflowInstanceId Id { get; init; }
 
+    /// <inheritdoc cref="WorkflowInstanceRecord.DefinitionId"/>
     public required string DefinitionId { get; init; }
 
+    /// <inheritdoc cref="WorkflowInstanceRecord.DefinitionVersion"/>
     public required int DefinitionVersion { get; init; }
 
+    /// <inheritdoc cref="WorkflowInstanceRecord.State"/>
     public required WorkflowInstanceState State { get; init; }
 
+    /// <inheritdoc cref="WorkflowInstanceRecord.TenantId"/>
     public string? TenantId { get; init; }
 
+    /// <inheritdoc cref="WorkflowInstanceRecord.CreatedAt"/>
     public required DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>Last checkpoint time — how an operator spots a stalled instance.</summary>

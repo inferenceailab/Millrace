@@ -19,10 +19,13 @@ namespace Millrace.Storage.Monitoring;
 /// </remarks>
 public sealed record JobSummary
 {
+    /// <inheritdoc cref="JobRecord.Id"/>
     public required JobId Id { get; init; }
 
+    /// <inheritdoc cref="JobRecord.Queue"/>
     public required string Queue { get; init; }
 
+    /// <inheritdoc cref="JobRecord.State"/>
     public required JobState State { get; init; }
 
     /// <summary>Declared service type from the captured invocation, for display.</summary>
@@ -31,13 +34,16 @@ public sealed record JobSummary
     /// <summary>Method name from the captured invocation, for display.</summary>
     public required string MethodName { get; init; }
 
+    /// <inheritdoc cref="JobRecord.Priority"/>
     public int Priority { get; init; }
 
+    /// <inheritdoc cref="JobRecord.CreatedAt"/>
     public required DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>Activation time while <see cref="JobState.Scheduled"/> or <see cref="JobState.Failed"/>.</summary>
     public DateTimeOffset? DueAt { get; init; }
 
+    /// <inheritdoc cref="JobRecord.FinishedAt"/>
     public DateTimeOffset? FinishedAt { get; init; }
 
     /// <summary>Executions started, including lease-expiry reclaims.</summary>
@@ -72,6 +78,7 @@ public sealed record JobSummary
     /// </remarks>
     public int Interruptions => Attempt - Failures;
 
+    /// <inheritdoc cref="JobRecord.TenantId"/>
     public string? TenantId { get; init; }
 
     /// <summary>Owning worker while <see cref="JobState.Processing"/>.</summary>
