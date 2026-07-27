@@ -1,9 +1,9 @@
 # Backlog
 
-> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-26 by `scripts/generate-backlog.ps1`.
+> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-27 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
-**54 done · 11 open** (of which 0 blocked on an unresolved spike).
+**59 done · 8 open** (of which 0 blocked on an unresolved spike).
 
 ## Epics
 
@@ -105,12 +105,14 @@ Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: cr
 
 | # | Story | Area | State |
 |---|---|---|---|
-| [#47](https://github.com/inferenceailab/Millrace/issues/47) | Blazor UI over the frozen contract | dashboard | open |
+| [#47](https://github.com/inferenceailab/Millrace/issues/47) | Blazor UI over the frozen contract | dashboard | done |
 | [#48](https://github.com/inferenceailab/Millrace/issues/48) | Documentation site | docs | open |
 | [#49](https://github.com/inferenceailab/Millrace/issues/49) | Benchmarks against Hangfire and WorkflowCore | docs | open |
-| [#77](https://github.com/inferenceailab/Millrace/issues/77) | Sagas: nested sagas | workflow | open |
-| [#97](https://github.com/inferenceailab/Millrace/issues/97) | Run a failed job now, without waiting out its backoff |  | open |
-| [#98](https://github.com/inferenceailab/Millrace/issues/98) | Packaging and release: nothing publishes today |  | open |
+| [#77](https://github.com/inferenceailab/Millrace/issues/77) | Sagas: nested sagas | workflow | done |
+| [#97](https://github.com/inferenceailab/Millrace/issues/97) | Run a failed job now, without waiting out its backoff |  | done |
+| [#98](https://github.com/inferenceailab/Millrace/issues/98) | Packaging and release: nothing publishes today |  | done |
+| [#99](https://github.com/inferenceailab/Millrace/issues/99) | Document the 164 undocumented public members |  | done |
+| [#122](https://github.com/inferenceailab/Millrace/issues/122) | Blazor UI: multi-view layout to match React and Angular | dashboard | open |
 
 ## Not yet scheduled
 

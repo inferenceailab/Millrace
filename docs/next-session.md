@@ -17,19 +17,22 @@ Nested sagas ([#119](https://github.com/inferenceailab/Millrace/pull/119), §11.
 ([#120](https://github.com/inferenceailab/Millrace/pull/120), §11.36) are both merged. `main` builds
 clean and the whole suite passes.
 
-**[#47](https://github.com/inferenceailab/Millrace/issues/47) is still open, and that needs a
-decision rather than a merge.** Its three acceptance criteria — embedded prebuilt bundle, frozen
-contract, parity tracked — are all met, so by its own terms it is done. What is not done is visual
-parity: the Blazor UI is one page against the shared stylesheet, where React and Angular have a
-multi-view layout. Either close it and raise the layout work as its own issue, or keep it open and
-say so in the issue, but do not leave the question implicit — a criteria-complete issue sitting open
-with no note reads as forgotten.
+**[#47](https://github.com/inferenceailab/Millrace/issues/47) is closed and the layout work is now
+[#122](https://github.com/inferenceailab/Millrace/issues/122), in the 1.0 milestone.** All three of
+#47's acceptance criteria were met, so it was closed on its own terms rather than stretched past
+them; what it never asked for is written down instead. Two things #122 records that were not obvious:
+the Blazor UI is one page where React and Angular each render six views, and `SignalAsync` and
+`GetInfoAsync` are on the client but called from no page — so an operator cannot raise a signal from
+the Blazor dashboard at all. The parity check passes anyway, correctly: §11.36's claim is
+one-directional, that a bundle never mentioning an endpoint does not call it, and both literals are
+present.
 
 ## Nothing is blocking on a person
 
 Publishing credentials were the last blocker and they are done, proven by a real release rather than
-by configuration looking right. The [#47](https://github.com/inferenceailab/Millrace/issues/47) call
-above wants a person, but nothing waits on it — it is a scoping decision, not a gate.
+by configuration looking right. Nothing waits on anyone now — 1.0 is three issues, all codeable
+except [#48](https://github.com/inferenceailab/Millrace/issues/48), which wants a generator chosen
+first.
 
 ## Releasing
 
@@ -61,7 +64,7 @@ Detail is in the issues; the ordering argument is not.
 |---|---|
 | [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. **Not codeable yet** — nobody has chosen a generator (docfx, Statiq, something else), and that is a §11 decision rather than a task. |
 | [#49](https://github.com/inferenceailab/Millrace/issues/49) Benchmarks | Positioning against Hangfire and WorkflowCore. Nothing depends on it, which makes it the one that can be picked up cold. |
-| [#47](https://github.com/inferenceailab/Millrace/issues/47) Blazor UI | Shipped in [#120](https://github.com/inferenceailab/Millrace/pull/120) and still open on purpose — see **Start here**. All three acceptance criteria met; it is **one page**, not the multi-view layout the other two have. |
+| [#122](https://github.com/inferenceailab/Millrace/issues/122) Blazor layout | The Blazor UI shipped in [#120](https://github.com/inferenceailab/Millrace/pull/120) as **one page**, where the other two have six views. Codeable today, and the issue names the two client methods no page reaches. |
 
 ## Things that will bite you
 
