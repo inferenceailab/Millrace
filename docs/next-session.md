@@ -17,22 +17,24 @@ Nested sagas ([#119](https://github.com/inferenceailab/Millrace/pull/119), §11.
 ([#120](https://github.com/inferenceailab/Millrace/pull/120), §11.36) are both merged. `main` builds
 clean and the whole suite passes.
 
-**[#47](https://github.com/inferenceailab/Millrace/issues/47) is closed and the layout work is now
-[#122](https://github.com/inferenceailab/Millrace/issues/122), in the 1.0 milestone.** All three of
-#47's acceptance criteria were met, so it was closed on its own terms rather than stretched past
-them; what it never asked for is written down instead. Two things #122 records that were not obvious:
-the Blazor UI is one page where React and Angular each render six views, and `SignalAsync` and
-`GetInfoAsync` are on the client but called from no page — so an operator cannot raise a signal from
-the Blazor dashboard at all. The parity check passes anyway, correctly: §11.36's claim is
-one-directional, that a bundle never mentioning an endpoint does not call it, and both literals are
-present.
+**[#49](https://github.com/inferenceailab/Millrace/issues/49) is done** ([#124](https://github.com/inferenceailab/Millrace/pull/124),
+§11.37): `bench/` holds a harness, [`benchmarks.md`](benchmarks.md) holds the numbers and the
+caveats. Millrace is 1.8× Hangfire enqueueing, 3.2–3.4× draining, 2.5–5× on median latency, and 5.3×
+WorkflowCore on workflow instances.
+
+**Two of 1.0's three remaining issues are now [#48](https://github.com/inferenceailab/Millrace/issues/48)
+and [#122](https://github.com/inferenceailab/Millrace/issues/122)** — see the table below. #47 was
+closed on its own terms and the layout work it never asked for became #122; what that issue records
+and the parity check does not is that `SignalAsync` and `GetInfoAsync` are on the Blazor client but
+called from no page, so an operator cannot raise a signal from that dashboard at all. §11.36's
+parity claim is one-directional — a bundle never mentioning an endpoint does not call it — and both
+literals are present, so it passes.
 
 ## Nothing is blocking on a person
 
 Publishing credentials were the last blocker and they are done, proven by a real release rather than
-by configuration looking right. Nothing waits on anyone now — 1.0 is three issues, all codeable
-except [#48](https://github.com/inferenceailab/Millrace/issues/48), which wants a generator chosen
-first.
+by configuration looking right. Nothing waits on anyone now — 1.0 is two issues, and only
+[#48](https://github.com/inferenceailab/Millrace/issues/48) wants a decision before it wants code.
 
 ## Releasing
 
@@ -62,9 +64,8 @@ Detail is in the issues; the ordering argument is not.
 
 | | Why it is where it is |
 |---|---|
-| [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. **Not codeable yet** — nobody has chosen a generator (docfx, Statiq, something else), and that is a §11 decision rather than a task. |
-| [#49](https://github.com/inferenceailab/Millrace/issues/49) Benchmarks | Positioning against Hangfire and WorkflowCore. Nothing depends on it, which makes it the one that can be picked up cold. |
 | [#122](https://github.com/inferenceailab/Millrace/issues/122) Blazor layout | The Blazor UI shipped in [#120](https://github.com/inferenceailab/Millrace/pull/120) as **one page**, where the other two have six views. Codeable today, and the issue names the two client methods no page reaches. |
+| [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. **Still not codeable** — nobody has chosen a generator (docfx, Statiq, something else), and that is a §11 decision rather than a task. It is now the only thing in 1.0 that cannot be started cold. |
 
 ## Things that will bite you
 
@@ -88,6 +89,21 @@ blaming CI.
 this twice: polling too tightly starves the worker through the storage lock, and polling without
 advancing the fake clock means the worker never wakes at all. `Eventually.ObservedAsync` in
 `test/Millrace.Tests/Workflows/` exists for this — advance the clock inside the predicate.
+
+**Adding a project to the solution can break a build that has nothing to do with it.** The Blazor
+package shells out to `dotnet publish`, and that app references `Millrace.csproj` — so it was a
+second MSBuild process writing the same `obj` as the outer solution build. Latent since #120,
+because it only fails when the timing lines up; adding `bench/` widened the graph enough that
+Windows CI failed with `CS2012` on `Millrace.dll` while Linux passed the same commit. Fixed by
+giving the inner publish its own `artifacts-path`. If a UI package ever gains another nested build,
+it needs the same treatment.
+
+**A benchmark measures the machine as much as the code.** Three separate measurement bugs in #49
+each produced a number that looked entirely plausible — an arrival-rate producer that throttled
+itself to 118/s for one system and 200/s for another, a throughput window that opened two-thirds of
+the way through the work, and a warmup small enough that every first run looked 3× faster than
+steady state. None of them looked wrong in the output; all three were found by asking why a number
+was *better* than expected. Suspect the flattering result first.
 
 **`gh pr edit` does not work on this repository.** It fails with a Projects-classic GraphQL error
 because it fetches project cards on the way past. `gh pr create` and `gh pr merge` are fine; editing
@@ -133,3 +149,13 @@ Newly true, and worth the same scrutiny in a few months:
 - **The parity check caught its author.** Adding the Blazor UI, it failed on the first run because
   the hand-written client was missing `/info` — the same "endpoint added, UI forgotten" failure it
   was built for, this time against the person building it.
+- **Publishing the spread, not just the median** (§11.37). Millrace is measured twice per benchmark
+  scenario with nothing changed between the two rows, which turns a repeatability control into
+  something a reader can check: the medians agree to within 0.4% while individual runs vary by 15%.
+  That pair is also the only honest answer to "is this difference real?" — under about 10%, it is
+  not.
+
+One that has not earned anything yet: **the benchmark harness only runs when someone runs it.** It
+compiles in CI and never executes there, so it will rot the way any unexecuted code does. The
+question in a few months is whether the numbers in `benchmarks.md` still reproduce, and the cheapest
+way to find out is to run it before believing the table.
