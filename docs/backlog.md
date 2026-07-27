@@ -3,7 +3,7 @@
 > **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-27 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
-**59 done · 8 open** (of which 0 blocked on an unresolved spike).
+**60 done · 7 open** (of which 0 blocked on an unresolved spike).
 
 ## Epics
 
@@ -107,7 +107,7 @@ Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: cr
 |---|---|---|---|
 | [#47](https://github.com/inferenceailab/Millrace/issues/47) | Blazor UI over the frozen contract | dashboard | done |
 | [#48](https://github.com/inferenceailab/Millrace/issues/48) | Documentation site | docs | open |
-| [#49](https://github.com/inferenceailab/Millrace/issues/49) | Benchmarks against Hangfire and WorkflowCore | docs | open |
+| [#49](https://github.com/inferenceailab/Millrace/issues/49) | Benchmarks against Hangfire and WorkflowCore | docs | done |
 | [#77](https://github.com/inferenceailab/Millrace/issues/77) | Sagas: nested sagas | workflow | done |
 | [#97](https://github.com/inferenceailab/Millrace/issues/97) | Run a failed job now, without waiting out its backoff |  | done |
 | [#98](https://github.com/inferenceailab/Millrace/issues/98) | Packaging and release: nothing publishes today |  | done |
