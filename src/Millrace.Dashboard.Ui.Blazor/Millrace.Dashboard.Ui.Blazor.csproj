@@ -24,9 +24,20 @@
     The app is deliberately not in Millrace.slnx. It is built through this target and nowhere else,
     so a solution build cannot start it a second time concurrently, and its output cannot go stale
     relative to the package that embeds it.
+
+    The artifacts-path flag is what keeps that true of the app's *dependencies* as well. The app
+    references Millrace.csproj, so this publish is a second MSBuild process building projects the
+    outer solution build is also building, into the same obj directory. That is a race, and the kind
+    that only fails when the timing is right: it went unnoticed until an unrelated project was added
+    to the solution, which widened the build graph enough to make the overlap likely, and then
+    Windows CI failed with CS2012 on Millrace.dll while Linux passed.
+
+    The flag redirects obj/ and bin/ for every project in this invocation, so the inner build has its
+    own intermediate output and cannot collide with the outer one. It compiles the shared projects a
+    second time, which it already did; the difference is only where it writes.
   -->
   <Target Name="BuildBlazorUi" BeforeTargets="BeforeBuild" Condition="'$(SkipUiBuild)' != 'true'">
-    <Exec Command="dotnet publish &quot;$(UiRoot)/Millrace.Dashboard.Ui.Blazor.App.csproj&quot; -c Release -o &quot;$(UiRoot)/publish&quot;" />
+    <Exec Command="dotnet publish &quot;$(UiRoot)/Millrace.Dashboard.Ui.Blazor.App.csproj&quot; -c Release -o &quot;$(UiRoot)/publish&quot; --artifacts-path &quot;$(UiRoot)/artifacts&quot;" />
   </Target>
 
   <!--

@@ -1,0 +1,29 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!--
+      Nothing under bench/ ships. Stated here rather than per project for the same reason test/
+      does it: a new benchmark project is un-packable by existing, and an accidental package is
+      public forever.
+    -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!--
+      A benchmark is read as much as it is run — the numbers are only worth what the method is —
+      so the harness documents itself in prose rather than on every public member. CS1591 stays a
+      build error everywhere that ships (§11.34).
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!--
+      Same reason as test/: the deterministic source-path remapping exists so a shipped package can
+      be rebuilt byte-for-byte, and the harness ships nothing. It also reads its own repository to
+      locate bench/docker-compose.yml for the reproduction instructions it prints.
+    -->
+    <ContinuousIntegrationBuild>false</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>

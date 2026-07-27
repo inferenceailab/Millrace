@@ -33,6 +33,9 @@ Planned work lives on the [project board](https://github.com/users/inferenceaila
 mirrored in [docs/backlog.md](docs/backlog.md). Unsettled design questions are tracked in
 [docs/open-questions.md](docs/open-questions.md).
 
+Measured against Hangfire and WorkflowCore in [docs/benchmarks.md](docs/benchmarks.md) — method,
+caveats and a harness you can run yourself.
+
 ## Install
 
 Everything published so far is a prerelease, so `--prerelease` is required until 1.0.
@@ -104,6 +107,7 @@ seven-day timeout is one call.
 src/      library packages (Millrace, Millrace.Storage.*, Millrace.Dashboard*, ...)
 test/     unit and integration tests
 samples/  runnable examples
+bench/    benchmarks vs Hangfire and WorkflowCore (docs/benchmarks.md)
 docs/     documentation
 ```
 

@@ -13,6 +13,9 @@
   <Folder Name="/samples/">
     <Project Path="samples/Millrace.Sample.Api/Millrace.Sample.Api.csproj" />
   </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/Millrace.Benchmarks/Millrace.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/test/">
     <Project Path="test/Millrace.Storage.PostgreSql.Tests/Millrace.Storage.PostgreSql.Tests.csproj" />
     <Project Path="test/Millrace.Storage.SqlServer.Tests/Millrace.Storage.SqlServer.Tests.csproj" />

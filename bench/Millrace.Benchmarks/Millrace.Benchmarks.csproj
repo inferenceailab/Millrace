@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      Server GC. A job runner's steady state is many short-lived allocations across many threads,
+      and the workstation collector's single heap makes the harness measure its own GC as much as
+      the systems under it. Set for every comparand, not just Millrace.
+    -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup Label="Millrace">
+    <ProjectReference Include="..\..\src\Millrace\Millrace.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Storage.PostgreSql\Millrace.Storage.PostgreSql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="What it is measured against">
+    <PackageReference Include="Hangfire.Core" />
+    <PackageReference Include="Hangfire.NetCore" />
+    <PackageReference Include="Hangfire.PostgreSql" />
+    <PackageReference Include="WorkflowCore" />
+    <PackageReference Include="WorkflowCore.Persistence.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup Label="Hosting">
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+</Project>
