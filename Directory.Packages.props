@@ -38,6 +38,23 @@
     <PackageVersion Include="Testcontainers.MsSql" Version="4.0.0" />
   </ItemGroup>
 
+  <!--
+    The systems Millrace is measured against (#49, §11.37). Benchmark-only: nothing under bench/
+    ships, and no shipping project may reference these. Their versions are recorded in the results
+    table, so a number can be traced to what produced it.
+  -->
+  <ItemGroup Label="Benchmark comparands">
+    <PackageVersion Include="Hangfire.Core" Version="1.8.24" />
+    <PackageVersion Include="Hangfire.NetCore" Version="1.8.24" />
+    <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
+    <PackageVersion Include="WorkflowCore" Version="3.18.0" />
+    <PackageVersion Include="WorkflowCore.Persistence.PostgreSQL" Version="3.18.0" />
+    <!-- Transitive pin. WorkflowCore 3.18.0 pulls OpenTelemetry.Api 1.12.0, which carries
+         GHSA-g94r-2vxg-569j. Warnings are errors here, so an unpinned comparand would fail the
+         build rather than the benchmark. Remove once WorkflowCore ships a patched dependency. -->
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.17.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Testing">
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />

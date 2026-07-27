@@ -1,0 +1,35 @@
+# PostgreSQL for the benchmarks. Every system under measurement uses this one server — that is what
+# "on the same database" in #49 means, and it is the only way the numbers compare.
+#
+#   cd bench && docker compose up -d
+#   dotnet run -c Release --project Millrace.Benchmarks -- --all
+#
+# Port 5434 so neither a PostgreSQL you already run (5432) nor the sample's (5433) is disturbed.
+# Each system gets its own database on this server, dropped and recreated before every measured
+# run, so no run inherits another's table bloat or planner statistics.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: millrace
+      POSTGRES_PASSWORD: millrace
+    ports:
+      - "5434:5432"
+    # The defaults ship a 128 MB shared_buffers and a 1 GB effective_cache_size, which is not what
+    # anyone runs in production and would make every system look equally bad at the same thing.
+    # These are modest, explicit, and identical for all three — the point is that no comparand is
+    # advantaged, not that the server is tuned.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - max_connections=200
+      - -c
+      - synchronous_commit=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U millrace"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
