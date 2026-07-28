@@ -59,7 +59,21 @@ public sealed class WorkflowVersioningTests
         public void Build(IWorkflowBuilder<Doc> flow) => flow.StartWith<Shared>().Then<OnlyInV2>();
     }
 
-    private static IHost BuildHost(FakeTimeProvider time, bool withV2)
+    /// <summary>
+    /// Builds a host for these tests.
+    /// </summary>
+    /// <param name="time">The controllable clock the worker and scheduler run against.</param>
+    /// <param name="withV2">Whether the second definition version is registered.</param>
+    /// <param name="withWorker">
+    /// Whether to run the worker pool and scheduler.
+    /// </param>
+    /// <remarks>
+    /// A test that drives the dispatcher directly must pass <see langword="false"/>. The worker
+    /// advances the instance on its own — checkpointing bumps <c>Revision</c> — so a test that reads
+    /// an instance and writes it back under optimistic concurrency is racing it, and loses whenever
+    /// the worker gets there first. That is a timing coin-flip, which is the worst kind of test.
+    /// </remarks>
+    private static IHost BuildHost(FakeTimeProvider time, bool withV2, bool withWorker = true)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
@@ -74,6 +88,8 @@ public sealed class WorkflowVersioningTests
 
             m.Configure(o =>
             {
+                o.WorkerEnabled = withWorker;
+                o.SchedulerEnabled = withWorker;
                 o.MinPollDelay = TimeSpan.FromMilliseconds(5);
                 o.MaxPollDelay = TimeSpan.FromMilliseconds(20);
                 o.SchedulerInterval = TimeSpan.FromMilliseconds(5);
@@ -166,7 +182,14 @@ public sealed class WorkflowVersioningTests
     public async Task An_instance_pinned_to_an_unregistered_version_fails_loudly()
     {
         var time = NewTime();
-        using var host = BuildHost(time, withV2: false);
+
+        // No worker: this test calls the dispatcher itself, and a running worker would advance the
+        // instance between the read and the write below — bumping Revision and failing the
+        // optimistic-concurrency check with a MillraceConcurrencyException instead of the
+        // InvalidOperationException under test. It did exactly that on CI while passing everywhere
+        // else, which is the shape §11.38's "tests that drive the real worker share its scheduler"
+        // warns about.
+        using var host = BuildHost(time, withV2: false, withWorker: false);
         await host.StartAsync();
 
         var storage = host.Services.GetRequiredService<IWorkflowStorage>();
