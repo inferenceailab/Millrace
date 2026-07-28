@@ -44,7 +44,42 @@ jobs:
           # Absent this, the harness falls back to CI being set, which is also strict.
           MILLRACE_REQUIRE_POSTGRES: ${{ matrix.require_postgres }}
           MILLRACE_REQUIRE_SQLSERVER: ${{ matrix.require_sqlserver }}
+          # No browser is installed on these jobs, so the UI rendering suite skips here. The
+          # coverage comes from the `browser` job below, which installs one and is strict. Stated
+          # explicitly because the default is strict: a job that says nothing about this and has no
+          # browser fails, which is the right way round.
+          MILLRACE_REQUIRE_BROWSER: 'false'
         run: dotnet test --no-build --configuration Release --verbosity normal
+
+  # The only job that executes a UI (#126, §11.40). Everything else in this repository checks the
+  # bundles statically — parity reads compiled bytes for a substring, packaging asserts exported
+  # types — and none of that notices a UI that renders nothing, which is exactly how the Blazor one
+  # reached main in #120.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      # The UI bundles must really be built here — this job serves them to a real browser, so
+      # SkipUiBuild would leave it testing three empty packages and passing.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.15.0
+
+      - name: Build
+        run: dotnet build test/Millrace.Dashboard.BrowserTests/Millrace.Dashboard.BrowserTests.csproj --configuration Release
+
+      - name: Install Chromium
+        run: pwsh test/Millrace.Dashboard.BrowserTests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
+      - name: Test
+        env:
+          # Strict, and redundantly so: CI alone would make it strict. Written out because this is
+          # the one job whose entire purpose is that a missing browser is a failure.
+          MILLRACE_REQUIRE_BROWSER: 'true'
+        run: dotnet test test/Millrace.Dashboard.BrowserTests/Millrace.Dashboard.BrowserTests.csproj --no-build --configuration Release --verbosity normal
 
   # Packing on every push, not only on a tag: the failures packaging introduces — a dependency the
   # solution supplied by project reference, an embedded resource that did not survive pack — are

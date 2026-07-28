@@ -20,6 +20,7 @@
     <Project Path="test/Millrace.Storage.PostgreSql.Tests/Millrace.Storage.PostgreSql.Tests.csproj" />
     <Project Path="test/Millrace.Storage.SqlServer.Tests/Millrace.Storage.SqlServer.Tests.csproj" />
     <Project Path="test/Millrace.Dashboard.Tests/Millrace.Dashboard.Tests.csproj" />
+    <Project Path="test/Millrace.Dashboard.BrowserTests/Millrace.Dashboard.BrowserTests.csproj" />
     <Project Path="test/Millrace.Tests/Millrace.Tests.csproj" />
   </Folder>
 </Solution>
