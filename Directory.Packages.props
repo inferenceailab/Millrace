@@ -56,6 +56,12 @@
   </ItemGroup>
 
   <ItemGroup Label="Testing">
+    <!--
+      Browser automation, for the rendering tests (#126). Referenced only by
+      Millrace.Dashboard.BrowserTests — nothing that ships may depend on it, and it pulls a
+      downloaded browser rather than a NuGet-only dependency.
+    -->
+    <PackageVersion Include="Microsoft.Playwright" Version="1.61.0" />
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />

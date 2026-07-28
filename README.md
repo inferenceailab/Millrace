@@ -130,6 +130,15 @@ package serves no UI).
 The PostgreSQL conformance run needs Docker (Testcontainers). It is strict in CI: an unreachable
 database fails the run rather than skipping it.
 
+The UI rendering tests need a browser, and follow the same rule. Install one once:
+
+```
+pwsh test/Millrace.Dashboard.BrowserTests/bin/Release/net10.0/playwright.ps1 install chromium
+```
+
+Without it they skip locally and fail in CI. **Run them before touching a UI** — they are the only
+check in the repository that executes a bundle rather than reading it.
+
 ## License
 
 [MIT](LICENSE)

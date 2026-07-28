@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <!--
+      Separate from Millrace.Dashboard.Tests on purpose. These drive a real browser against a real
+      Kestrel port, so they are slower by an order of magnitude and carry a dependency — a downloaded
+      browser — that the fast dashboard tests should not inherit. Keeping them apart is also what
+      lets CI run them as their own job and lets `dotnet test` on the other project stay quick.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\src\Millrace.Dashboard\Millrace.Dashboard.csproj" />
+    <!-- All three UI packages: each gets its own host, since AddMillrace*Ui uses TryAdd (§7). -->
+    <ProjectReference Include="..\..\src\Millrace.Dashboard.Ui.React\Millrace.Dashboard.Ui.React.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Dashboard.Ui.Angular\Millrace.Dashboard.Ui.Angular.csproj" />
+    <ProjectReference Include="..\..\src\Millrace.Dashboard.Ui.Blazor\Millrace.Dashboard.Ui.Blazor.csproj" />
+    <PackageReference Include="Microsoft.Playwright" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>
