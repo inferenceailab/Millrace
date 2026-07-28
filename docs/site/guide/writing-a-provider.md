@@ -15,7 +15,7 @@ interface, and run the suite — what "supported" means is "passes the suite".
 ## Start with the kit, not the implementation
 
 ```bash
-dotnet add package Millrace.Storage.Verification --prerelease
+dotnet add package Millrace.Storage.Verification
 ```
 
 Wire it up before you have written anything. A wall of red is a specification you can work against;

@@ -37,7 +37,7 @@ Right for: development, the sample, unit and integration tests (though
 ## PostgreSQL
 
 ```bash
-dotnet add package Millrace.Storage.PostgreSql --prerelease
+dotnet add package Millrace.Storage.PostgreSql
 ```
 
 ```csharp
@@ -74,7 +74,7 @@ millrace.UsePostgreSqlStorage(sp => sp.GetRequiredService<NpgsqlDataSource>());
 ## SQL Server
 
 ```bash
-dotnet add package Millrace.Storage.SqlServer --prerelease
+dotnet add package Millrace.Storage.SqlServer
 ```
 
 ```csharp

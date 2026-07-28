@@ -11,14 +11,13 @@ dashboard-included. The mental model: *Hangfire's substrate with a real orchestr
 A millrace is the engineered channel that carries water to the wheel: directed, sustained flow that
 does work.
 
-> [!IMPORTANT]
-> **Millrace is alpha.** The published version is `0.1.0-alpha.1`, and that number is deliberately
-> conservative. 1.0 is where the storage contract and the v1 REST contract become stable promises,
-> so the version stays where it is until that promise is actually made. Everything documented here
-> is built and tested — but expect the surface to move before 1.0.
+> [!NOTE]
+> **Millrace is 1.0.** The storage contract and the v1 REST contract are **stable** — they will not
+> break within 1.x. That promise is the entire meaning of this version number, which stayed at
+> `0.1.0-alpha` until it could be made honestly.
 
 ```bash
-dotnet add package Millrace --prerelease
+dotnet add package Millrace
 ```
 
 ```csharp
@@ -90,7 +89,7 @@ These are the constraints the library is built under, and they are the reason to
 | 0.3 | Workflow engine core | **done** |
 | 0.4 | Sagas, compensation, versioning, management actions | **done** |
 | 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | **done** |
-| 1.0 | Hardening, Blazor UI, docs site, benchmarks | in progress |
+| 1.0 | Hardening, Blazor UI, docs site, benchmarks, stable contracts | **done** |
 
 [**ARCHITECTURE.md**](https://github.com/inferenceailab/Millrace/blob/main/ARCHITECTURE.md) is the
 accepted design, and its §11 decision log records why each significant choice was made — including
