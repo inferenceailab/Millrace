@@ -491,3 +491,9 @@ spikes/ui-webcomponents/element/dist/
 spikes/ui-webcomponents/hosts/Millrace.Spike.BlazorHost/wwwroot/millrace-jobs.js
 spikes/ui-webcomponents/hosts/Millrace.Spike.BlazorHost/wwwroot/millrace.css
 .playwright-mcp/
+
+# Millrace: the documentation site's API reference is generated from the XML docs on every build
+# (docs/site/docfx.json), and `_site` is the rendered output. Committing either would let the
+# published reference drift from the source it was generated from.
+docs/site/api/
+docs/site/_site/

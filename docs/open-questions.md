@@ -8,20 +8,11 @@ Anything already decided is *not* here — see §11. Don't re-litigate those.
 
 ## Currently blocking
 
-### Workflow checkpoints cannot be atomic with the job transition — [#64](https://github.com/inferenceailab/Millrace/issues/64)
+**Nothing.** No design question is holding up code right now.
 
-**Blocks the rest of 0.3** (#36, #37, #38). §6.2 requires the instance checkpoint, the next-activity
-enqueue and the activity job's transition to commit as one atom — "the checkpoint is the unit of
-exactly-once progress". `JobTransition` can carry the enqueue but not the checkpoint, and
-`UpdateInstanceAsync` is a separate call on a separate interface, so the coupling is inexpressible.
-
-Either ordering of two calls loses: checkpoint-then-transition re-runs an activity from a cursor
-that already moved past it; transition-then-checkpoint stalls the instance forever with no failure
-recorded. Recommended fix is an optional checkpoint on `JobTransition`, the direct analogue of the
-existing `Enqueue`.
-
-The definition builder (#35) is unaffected and is done — it produces the graph shape and touches no
-storage.
+The last one was the generator for the documentation site, settled on 2026-07-28 as docfx (§11.39,
+closing [#48](https://github.com/inferenceailab/Millrace/issues/48)) — which was also the last issue
+in the 1.0 milestone.
 
 ## Settled
 
@@ -35,6 +26,13 @@ The four questions that gated the 0.2 dashboard slice were settled on 2026-07-25
 | Default authorization posture | Startup error outside Development | §11.13 |
 | Where `IMonitoringStorage` lives | Separate interface, required of a supported provider | §11.14 |
 | Whether the three UIs share one rendered implementation | No — shared non-visual core, per-framework rendering, native Blazor | §11.23 |
+
+Settled since, each once it stopped being answerable on paper:
+
+| Was | Settled as | Decision |
+|---|---|---|
+| Workflow checkpoints cannot be atomic with the job transition ([#64](https://github.com/inferenceailab/Millrace/issues/64)) | An optional checkpoint on `JobTransition`, committing in the same atom | §11.16 |
+| Which generator the documentation site uses ([#48](https://github.com/inferenceailab/Millrace/issues/48)) | docfx — the only one that publishes the XML comments §11.34 made mandatory | §11.39 |
 
 Two consequences are worth knowing before writing UI code, because they are easy to violate by
 habit:

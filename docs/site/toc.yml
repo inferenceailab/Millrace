@@ -1,0 +1,9 @@
+- name: Guide
+  href: guide/
+  homepage: guide/getting-started.md
+- name: API reference
+  href: api/
+- name: Architecture
+  href: https://github.com/inferenceailab/Millrace/blob/main/ARCHITECTURE.md
+- name: Benchmarks
+  href: https://github.com/inferenceailab/Millrace/blob/main/docs/benchmarks.md

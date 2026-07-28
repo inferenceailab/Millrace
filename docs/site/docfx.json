@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../../src",
+          "files": [
+            "Millrace/Millrace.csproj",
+            "Millrace.Dashboard/Millrace.Dashboard.csproj",
+            "Millrace.Dashboard.Ui.React/Millrace.Dashboard.Ui.React.csproj",
+            "Millrace.Dashboard.Ui.Angular/Millrace.Dashboard.Ui.Angular.csproj",
+            "Millrace.Dashboard.Ui.Blazor/Millrace.Dashboard.Ui.Blazor.csproj",
+            "Millrace.Storage.PostgreSql/Millrace.Storage.PostgreSql.csproj",
+            "Millrace.Storage.SqlServer/Millrace.Storage.SqlServer.csproj",
+            "Millrace.Storage.Verification/Millrace.Storage.Verification.csproj",
+            "Millrace.Testing/Millrace.Testing.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "properties": {
+        "TargetFramework": "net10.0",
+        "SkipUiBuild": "true"
+      },
+      "memberLayout": "separatePages",
+      "namespaceLayout": "nested",
+      "enumSortOrder": "declaringOrder",
+      "disableGitFeatures": false
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": ["**/*.{md,yml}"],
+        "exclude": ["_site/**", "README.md"]
+      }
+    ],
+    "resource": [
+      {
+        "files": ["images/**", "logo.svg"]
+      }
+    ],
+    "output": "_site",
+    "template": ["default", "modern", "template"],
+    "globalMetadata": {
+      "_appName": "Millrace",
+      "_appTitle": "Millrace",
+      "_appLogoPath": "logo.svg",
+      "_appFaviconPath": "logo.svg",
+      "_appFooter": "Millrace — durable jobs and workflows for .NET. MIT licensed.",
+      "_enableSearch": true,
+      "_disableContribution": false,
+      "_gitContribute": {
+        "repo": "https://github.com/inferenceailab/Millrace",
+        "branch": "main"
+      },
+      "pdf": false
+    },
+    "sitemap": {
+      "baseUrl": "https://inferenceailab.github.io/Millrace/"
+    }
+  }
+}

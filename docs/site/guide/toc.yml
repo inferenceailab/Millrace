@@ -1,0 +1,16 @@
+- name: Getting started
+  href: getting-started.md
+- name: Delivery guarantees
+  href: delivery.md
+- name: Jobs
+  href: jobs.md
+- name: Workflows
+  href: workflows.md
+- name: Storage providers
+  href: providers.md
+- name: Writing a provider
+  href: writing-a-provider.md
+- name: Dashboard
+  href: dashboard.md
+- name: Testing your jobs
+  href: testing.md

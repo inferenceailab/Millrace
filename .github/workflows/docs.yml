@@ -1,0 +1,67 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Pages deployment needs these; the build job below runs without them on a pull request.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A superseded docs deploy has nothing worth finishing, but letting one cancel a run mid-deploy
+# would leave the Pages environment half-updated — so queue rather than cancel.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # Built on pull requests as well as pushes, deliberately. release.yml's steps only ever run on a
+  # tag, which means CI never exercises them and the next release is always their first real test.
+  # Publishing docs from a workflow nobody runs until merge day would repeat that; this way the
+  # build that matters has already run before anything is merged.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # docfx stamps each API page with a source link, which it resolves from git history.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # No setup-node here, on purpose. docfx passes -p:SkipUiBuild=true (docs/site/docfx.json), so
+      # the UI projects contribute their C# without compiling a bundle — and if that ever stops
+      # being true, this job fails rather than quietly growing a Node dependency.
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Build the site
+        # docfx exits 0 on warnings; --warningsAsErrors makes a broken cross-reference or an
+        # unresolvable link fail here instead of shipping as a dead link. The same reasoning as
+        # refusing to suppress CS1574 (ARCHITECTURE.md §11.31).
+        run: dotnet docfx docs/site/docfx.json --warningsAsErrors
+
+      - name: Check internal links
+        shell: pwsh
+        run: ./scripts/check-docs-links.ps1 -Site docs/site/_site
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/site/_site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

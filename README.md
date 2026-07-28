@@ -4,8 +4,9 @@
 > SQL providers, the dashboard and its React and Angular UIs. Phase 1.0 is in progress. The
 > published version is `0.1.0-alpha.1`, and that number is deliberately conservative rather than a
 > phase number: 1.0 is what will promise stability for the storage and REST contracts, so the
-> version stays where it is until that promise is made. Start with
-> [ARCHITECTURE.md](ARCHITECTURE.md).
+> version stays where it is until that promise is made. Start with the
+> [documentation](https://inferenceailab.github.io/Millrace/), or with
+> [ARCHITECTURE.md](ARCHITECTURE.md) if you would rather read the design.
 
 **Millrace** is a durable job and workflow orchestration library for .NET — in-process,
 storage-agnostic, dashboard-included. The mental model: *Hangfire's substrate with a real
@@ -28,6 +29,9 @@ directed, sustained flow that does work.
 | 0.4 | Sagas, compensation, versioning, management actions | **done** |
 | 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | **done** |
 | 1.0 | Hardening, Blazor UI, docs site, benchmarks | in progress |
+
+Full documentation — guides and the generated API reference — is at
+**<https://inferenceailab.github.io/Millrace/>**; its source is [docs/site](docs/site).
 
 Planned work lives on the [project board](https://github.com/users/inferenceailab/projects/1),
 mirrored in [docs/backlog.md](docs/backlog.md). Unsettled design questions are tracked in
