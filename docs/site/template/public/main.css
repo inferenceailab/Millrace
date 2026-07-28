@@ -1,0 +1,63 @@
+/*
+ * Millrace documentation theme.
+ *
+ * Layered over docfx's `modern` template rather than replacing it — this file only sets the brand
+ * colour and a few readability corrections, so a docfx upgrade brings its own fixes with it instead
+ * of being fought.
+ */
+
+:root {
+  --millrace-accent: #1c6b8c;
+  --millrace-accent-dark: #4bb3d4;
+}
+
+/* Brand colour. docfx's modern template drives nearly everything from these two variables. */
+:root,
+:root[data-bs-theme="light"] {
+  --bs-link-color-rgb: 28, 107, 140;
+  --bs-link-hover-color-rgb: 20, 78, 102;
+}
+
+:root[data-bs-theme="dark"] {
+  --bs-link-color-rgb: 75, 179, 212;
+  --bs-link-hover-color-rgb: 122, 200, 226;
+}
+
+/*
+ * Constrain the navbar logo.
+ *
+ * The modern template injects the brand client-side as `<img id="logo">` and sizes it from that id,
+ * so a class selector loses on specificity and the logo lays out at ~69px — large enough to overlap
+ * the brand text beside it. Matching on the id is what actually wins.
+ */
+#logo {
+  width: 28px;
+  height: 28px;
+  margin-right: 0.5rem;
+}
+
+/* Prose measure. Unbounded line length is the single biggest readability cost on wide displays. */
+article.content {
+  max-width: 62rem;
+}
+
+/* Code blocks read better with a touch more room than the default. */
+article.content pre {
+  padding: 1rem;
+  line-height: 1.5;
+}
+
+/* Tables are used heavily in this documentation for option and policy summaries. */
+article.content table {
+  margin-bottom: 1.25rem;
+}
+
+article.content table th {
+  font-weight: 600;
+}
+
+/* Alerts (> [!NOTE] etc.) carry a lot of the important caveats — give them presence. */
+article.content .alert {
+  border-left-width: 4px;
+  border-radius: 4px;
+}
