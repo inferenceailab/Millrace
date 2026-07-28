@@ -11,7 +11,7 @@ assert, hope — produces tests that are slow, flaky, and quietly useless when a
 `Millrace.Testing` removes the waiting entirely.
 
 ```bash
-dotnet add package Millrace.Testing --prerelease
+dotnet add package Millrace.Testing
 ```
 
 ## The shape of a test

@@ -1,10 +1,9 @@
 # Millrace
 
-> **Status: alpha.** Everything through phase 0.5 is built and green — jobs, workflows, sagas, both
-> SQL providers, the dashboard and its React and Angular UIs. Phase 1.0 is in progress. The
-> published version is `0.1.0-alpha.1`, and that number is deliberately conservative rather than a
-> phase number: 1.0 is what will promise stability for the storage and REST contracts, so the
-> version stays where it is until that promise is made. Start with the
+> **Status: 1.0.** Jobs, workflows, sagas, both SQL providers, the dashboard and its three official
+> UIs are built, tested and published. **The storage contract and the v1 REST contract are now
+> stable**: they will not break within 1.x. That promise is the whole meaning of this version
+> number, which stayed at `0.1.0-alpha` until it could be made honestly. Start with the
 > [documentation](https://inferenceailab.github.io/Millrace/), or with
 > [ARCHITECTURE.md](ARCHITECTURE.md) if you would rather read the design.
 
@@ -28,7 +27,7 @@ directed, sustained flow that does work.
 | 0.3 | Workflow engine core | **done** |
 | 0.4 | Sagas, compensation, versioning, management actions | **done** |
 | 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | **done** |
-| 1.0 | Hardening, Blazor UI, docs site, benchmarks | in progress |
+| 1.0 | Hardening, Blazor UI, docs site, benchmarks, stable contracts | **done** |
 
 Full documentation — guides and the generated API reference — is at
 **<https://inferenceailab.github.io/Millrace/>**; its source is [docs/site](docs/site).
@@ -42,11 +41,9 @@ caveats and a harness you can run yourself.
 
 ## Install
 
-Everything published so far is a prerelease, so `--prerelease` is required until 1.0.
-
 ```bash
-dotnet add package Millrace --prerelease
-dotnet add package Millrace.Storage.PostgreSql --prerelease
+dotnet add package Millrace
+dotnet add package Millrace.Storage.PostgreSql
 ```
 
 ```csharp
@@ -59,7 +56,7 @@ your own client against the REST contract.
 
 ```csharp
 builder.Services.AddMillraceDashboard();
-builder.Services.AddMillraceReactUi();   // or AddMillraceAngularUi()
+builder.Services.AddMillraceReactUi();   // or AddMillraceAngularUi() / AddMillraceBlazorUi()
 
 app.MapMillraceDashboard("/millrace");
 ```
@@ -72,6 +69,7 @@ app.MapMillraceDashboard("/millrace");
 | `Millrace.Dashboard` | The REST + OpenAPI contract and middleware. No UI of its own. |
 | `Millrace.Dashboard.Ui.React` | Prebuilt React bundle, embedded. |
 | `Millrace.Dashboard.Ui.Angular` | Prebuilt Angular bundle, embedded. |
+| `Millrace.Dashboard.Ui.Blazor` | Blazor WebAssembly UI, embedded. Carries the .NET WASM runtime, so ~6.4 MB against ~150–210 KB for the other two. |
 | `Millrace.Testing` | Deterministic test host — see below. |
 | `Millrace.Storage.Verification` | Conformance kit, for writing your own provider. |
 

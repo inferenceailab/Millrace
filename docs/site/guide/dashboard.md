@@ -20,8 +20,8 @@ own client against it is expected.
 ## Mounting it
 
 ```bash
-dotnet add package Millrace.Dashboard --prerelease
-dotnet add package Millrace.Dashboard.Ui.React --prerelease
+dotnet add package Millrace.Dashboard
+dotnet add package Millrace.Dashboard.Ui.React
 ```
 
 ```csharp

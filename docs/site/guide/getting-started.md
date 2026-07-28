@@ -18,10 +18,8 @@ requirement for building *this repository*.
 
 ## Install
 
-Everything published so far is a prerelease, so `--prerelease` is required until 1.0.
-
 ```bash
-dotnet add package Millrace --prerelease
+dotnet add package Millrace
 ```
 
 ## Register the services
@@ -90,8 +88,8 @@ node is shutting down or the lease is lost.
 The dashboard is two packages: the API contract, and a UI to render it. Both are opt-in.
 
 ```bash
-dotnet add package Millrace.Dashboard --prerelease
-dotnet add package Millrace.Dashboard.Ui.React --prerelease
+dotnet add package Millrace.Dashboard
+dotnet add package Millrace.Dashboard.Ui.React
 ```
 
 ```csharp
@@ -116,7 +114,7 @@ Then open `/millrace/ui`.
 One connection string is the entire difference between the in-memory story and the durable one:
 
 ```bash
-dotnet add package Millrace.Storage.PostgreSql --prerelease
+dotnet add package Millrace.Storage.PostgreSql
 ```
 
 ```csharp
