@@ -1,0 +1,157 @@
+@namespace Millrace.Dashboard.Ui.Blazor.App.Views
+@inject DashboardClient Api
+
+<div class="controls">
+    <div class="field">
+        <label for="definition">Definition</label>
+        <input id="definition" type="text" placeholder="Any" value="@_definitionId"
+               @onchange="e => SetDefinitionAsync(e.Value as string)" />
+    </div>
+</div>
+
+@if (_loading)
+{
+    <Loading />
+}
+@if (_error is not null)
+{
+    <ErrorNotice Message="@_error" />
+}
+@if (_actionError is not null)
+{
+    <ErrorNotice Message="@_actionError" />
+}
+@if (_page is not null)
+{
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>State</th>
+                    <th>Definition</th>
+                    <th class="num">Version</th>
+                    <th>Created</th>
+                    <th>Last checkpoint</th>
+                    <th class="num">Revision</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_page.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="muted">No workflow instances.</td>
+                    </tr>
+                }
+                @foreach (var instance in _page.Items)
+                {
+                    <tr>
+                        <td><Chip State="@instance.State.ToString()" /></td>
+                        <td>
+                            @instance.DefinitionId
+                            <div class="muted mono">@instance.Id</div>
+                        </td>
+                        <td class="num">@instance.DefinitionVersion</td>
+                        <td>@Format.Time(instance.CreatedAt)</td>
+                        <td>@Format.Time(instance.UpdatedAt)</td>
+                        <td class="num">@instance.Revision</td>
+                        <td>
+                            @if (instance.State == WorkflowInstanceState.Suspended)
+                            {
+                                @* §11.30: a suspended unwind is a pause, and this is the way out of it. *@
+                                <div class="controls" style="margin-bottom: 0">
+                                    @foreach (var action in Actions)
+                                    {
+                                        <button type="button" disabled="@_busy"
+                                                @onclick="() => ResolveAsync(instance.Id, action)">@action</button>
+                                    }
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <Pager NextCursor="@_page.NextCursor"
+           CanGoBack="_cursors.CanGoBack"
+           Count="_page.Items.Count"
+           OnNext="NextPageAsync"
+           OnBack="PreviousPageAsync" />
+}
+
+@code {
+    private static readonly string[] Actions = ["retry", "skip", "abandon"];
+
+    private readonly CursorStack _cursors = new();
+    private Page<WorkflowInstanceSummary>? _page;
+    private string _definitionId = string.Empty;
+    private string? _error;
+    private string? _actionError;
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _page = await Api.GetInstancesAsync(_definitionId, _cursors.Cursor);
+        }
+        catch (HttpRequestException e)
+        {
+            _error = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ResolveAsync(WorkflowInstanceId id, string action)
+    {
+        _busy = true;
+        _actionError = null;
+        try
+        {
+            // False means the instance was no longer suspended — a stale button, not a fault, so it
+            // is not reported. Re-reading below is the right answer either way.
+            await Api.ResolveCompensationAsync(id, action);
+        }
+        catch (HttpRequestException e)
+        {
+            _actionError = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _busy = false;
+            await LoadAsync();
+        }
+    }
+
+    private Task SetDefinitionAsync(string? value)
+    {
+        _definitionId = value ?? string.Empty;
+        _cursors.Reset();
+        return LoadAsync();
+    }
+
+    private Task NextPageAsync()
+    {
+        if (_page?.NextCursor is { } cursor)
+        {
+            _cursors.Next(cursor);
+        }
+
+        return LoadAsync();
+    }
+
+    private Task PreviousPageAsync()
+    {
+        _cursors.Back();
+        return LoadAsync();
+    }
+}

@@ -37,6 +37,16 @@
     second time, which it already did; the difference is only where it writes.
   -->
   <Target Name="BuildBlazorUi" BeforeTargets="BeforeBuild" Condition="'$(SkipUiBuild)' != 'true'">
+    <!--
+      Emptied first, because `dotnet publish -o` writes into the directory without clearing it and
+      Blazor fingerprints every asset with a content hash. A second build therefore adds
+      Millrace.Dashboard.Ui.Blazor.App.<newhash>.wasm beside the old one rather than replacing it,
+      and EmbedBlazorUi below embeds everything it finds — so the package accumulates one copy of
+      every assembly per build it has ever seen. Eight copies of the app assembly and three of
+      System.Net.Http.Json had built up before this was noticed, which both inflates the package and
+      makes "did my change get in?" unanswerable by looking at the folder.
+    -->
+    <RemoveDir Directories="$(UiRoot)/publish" />
     <Exec Command="dotnet publish &quot;$(UiRoot)/Millrace.Dashboard.Ui.Blazor.App.csproj&quot; -c Release -o &quot;$(UiRoot)/publish&quot; --artifacts-path &quot;$(UiRoot)/artifacts&quot;" />
   </Target>
 

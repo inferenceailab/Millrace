@@ -1,0 +1,163 @@
+@namespace Millrace.Dashboard.Ui.Blazor.App.Views
+@inject DashboardClient Api
+
+@if (_loading)
+{
+    <Loading />
+}
+@if (_error is not null)
+{
+    <ErrorNotice Message="@_error" />
+}
+@if (_actionError is not null)
+{
+    <ErrorNotice Message="@_actionError" />
+}
+@if (_page is not null)
+{
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Cron (UTC)</th>
+                    <th>Queue</th>
+                    <th>Next fire</th>
+                    <th>Last fired</th>
+                    <th>Last outcome</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_page.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="muted">No recurring definitions.</td>
+                    </tr>
+                }
+                @foreach (var definition in _page.Items)
+                {
+                    var overdue = definition.NextFireTime is { } next && Format.IsOverdue(next, _now);
+                    <tr>
+                        <td>
+                            @definition.Id
+                            <div class="muted mono">@definition.MethodName</div>
+                        </td>
+                        <td class="mono">@definition.Cron</td>
+                        <td>@definition.Queue</td>
+                        <td class="@(overdue ? "overdue" : null)">
+                            @Format.Time(definition.NextFireTime)
+                            @if (definition.NextFireTime is { } next2)
+                            {
+                                <div class="@(overdue ? "overdue" : "muted")">@Format.DueText(next2, _now)</div>
+                            }
+                        </td>
+                        <td>@Format.Time(definition.LastFireTime)</td>
+                        <td>
+                            @if (definition.LastOutcome is { } outcome)
+                            {
+                                <RouteLink Route="@($"/jobs/{definition.LastJobId}")"><Chip State="@outcome.ToString()" /></RouteLink>
+                            }
+                            else
+                            {
+                                <span class="muted">never run</span>
+                            }
+                        </td>
+                        <td>
+                            <button type="button" disabled="@_busy"
+                                    @onclick="() => TriggerAsync(definition.Id)">Run now</button>
+                            @if (_triggered == definition.Id)
+                            {
+                                <div class="muted">Fired.</div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <Pager NextCursor="@_page.NextCursor"
+           CanGoBack="_cursors.CanGoBack"
+           Count="_page.Items.Count"
+           OnNext="NextPageAsync"
+           OnBack="PreviousPageAsync" />
+    <p class="muted" style="margin-top: 12px">
+        Running now adds an extra occurrence and leaves the schedule alone — the next fire time is
+        unchanged. Last outcome is the most recently <em>created</em> run, so an occurrence still
+        going shows as running rather than reporting the previous night's result.
+    </p>
+}
+
+@code {
+    private readonly CursorStack _cursors = new();
+    private Page<RecurringSummary>? _page;
+    private string? _error;
+    private string? _actionError;
+    private string? _triggered;
+    private bool _loading = true;
+    private bool _busy;
+
+    // Captured once per render rather than read per row, so every "overdue by" on the page is
+    // measured against the same instant.
+    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _page = await Api.GetRecurringAsync(_cursors.Cursor);
+            _now = DateTimeOffset.UtcNow;
+        }
+        catch (HttpRequestException e)
+        {
+            _error = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task TriggerAsync(string id)
+    {
+        _busy = true;
+        _triggered = null;
+        _actionError = null;
+        try
+        {
+            await Api.TriggerRecurringAsync(id);
+            _triggered = id;
+            // The definition's own row does not change — NextFireTime is deliberately untouched —
+            // but the job it enqueued is now real, so anything derived from the list is re-read.
+            await LoadAsync();
+        }
+        catch (HttpRequestException e)
+        {
+            _actionError = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task NextPageAsync()
+    {
+        if (_page?.NextCursor is { } cursor)
+        {
+            _cursors.Next(cursor);
+        }
+
+        return LoadAsync();
+    }
+
+    private Task PreviousPageAsync()
+    {
+        _cursors.Back();
+        return LoadAsync();
+    }
+}

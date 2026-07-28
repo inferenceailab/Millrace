@@ -1,0 +1,22 @@
+<div class="pager">
+    <button type="button" @onclick="OnBack" disabled="@(!CanGoBack)">← Previous</button>
+    <button type="button" @onclick="OnNext" disabled="@(NextCursor is null)">Next →</button>
+    <span>@Count row@(Count == 1 ? "" : "s") on this page</span>
+</div>
+
+@code {
+    [Parameter]
+    public string? NextCursor { get; set; }
+
+    [Parameter]
+    public bool CanGoBack { get; set; }
+
+    [Parameter]
+    public int Count { get; set; }
+
+    [Parameter]
+    public EventCallback OnNext { get; set; }
+
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+}

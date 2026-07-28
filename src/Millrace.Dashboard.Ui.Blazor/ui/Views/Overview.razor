@@ -1,0 +1,110 @@
+@namespace Millrace.Dashboard.Ui.Blazor.App.Views
+@inject DashboardClient Api
+
+@* Every figure answers one question, so these are tiles, not a chart. *@
+
+@if (_loading)
+{
+    <Loading />
+}
+else if (_error is not null)
+{
+    <ErrorNotice Message="@_error" />
+}
+else if (_stats is not null)
+{
+    <section>
+        <h2>Jobs by state</h2>
+        <div class="tiles">
+            @*
+                Indexed without a fallback: the conformance kit requires every state to be present in
+                JobsByState, so a missing key is a provider bug rather than something to paper over.
+            *@
+            @foreach (var state in Enum.GetValues<JobState>())
+            {
+                <div class="tile @(_stats.JobsByState[state] == 0 ? "is-zero" : null)">
+                    <div class="label"><Chip State="@state.ToString()" /></div>
+                    <div class="value">@_stats.JobsByState[state].ToString("N0")</div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section>
+        <h2>Schedules</h2>
+        <div class="tiles">
+            <div class="tile">
+                <div class="label">Recurring</div>
+                <div class="value">@_stats.RecurringDefinitions.ToString("N0")</div>
+            </div>
+            <div class="tile @(_stats.OverdueRecurringDefinitions == 0 ? "is-zero" : null)">
+                <div class="label">Overdue</div>
+                <div class="value @(_stats.OverdueRecurringDefinitions > 0 ? "overdue" : null)">
+                    @_stats.OverdueRecurringDefinitions.ToString("N0")
+                </div>
+            </div>
+        </div>
+        @if (_stats.OverdueRecurringDefinitions > 0)
+        {
+            <div class="notice error">
+                <strong>@_stats.OverdueRecurringDefinitions schedule(s) are overdue.</strong>
+                Either the scheduler is behind, or no node is running the scheduler role.
+            </div>
+        }
+    </section>
+
+    <section>
+        <h2>Queue depth</h2>
+        @if (Queues.Count == 0)
+        {
+            <p class="muted">Nothing claimable.</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Queue</th>
+                            <th class="num">Enqueued</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (queue, depth) in Queues)
+                        {
+                            <tr>
+                                <td>@queue</td>
+                                <td class="num">@depth.ToString("N0")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    private JobStatistics? _stats;
+    private string? _error;
+    private bool _loading = true;
+
+    private IReadOnlyList<KeyValuePair<string, long>> Queues =>
+        [.. (_stats?.EnqueuedByQueue ?? new Dictionary<string, long>()).OrderByDescending(q => q.Value)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _stats = await Api.GetStatisticsAsync();
+        }
+        catch (HttpRequestException e)
+        {
+            _error = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
