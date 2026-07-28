@@ -1,0 +1,106 @@
+@namespace Millrace.Dashboard.Ui.Blazor.App.Views
+@inject DashboardClient Api
+
+@*
+    Sending a signal by hand.
+
+    The payload is raw JSON rather than a form, because the workflow definition declares the payload
+    type and the engine binds on its side of the wire (§11.5) — the dashboard has no schema to render
+    a form from, and pretending otherwise would be a lie about what it knows.
+*@
+
+<p class="muted">
+    Delivers a signal to an instance waiting on this name and correlation id. Delivery is
+    at-most-once, so "nothing was waiting" is a normal answer rather than a fault — a signal sent
+    before the instance reaches its wait is simply lost.
+</p>
+
+<div class="controls">
+    <div class="field">
+        <label for="signal-name">Name</label>
+        <input id="signal-name" type="text" placeholder="OrderApproved" value="@_name"
+               @oninput="e => _name = e.Value as string ?? string.Empty" />
+    </div>
+    <div class="field">
+        <label for="signal-correlation">Correlation id</label>
+        <input id="signal-correlation" type="text" placeholder="order-42" value="@_correlationId"
+               @oninput="e => _correlationId = e.Value as string ?? string.Empty" />
+    </div>
+    <button type="button" @onclick="SendAsync" disabled="@(_busy || !Ready)">Send</button>
+</div>
+
+<div class="field">
+    <label for="signal-payload">Payload (JSON, optional)</label>
+    <textarea id="signal-payload" rows="6" spellcheck="false"
+              style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px"
+              value="@_payload"
+              @oninput="e => _payload = e.Value as string ?? string.Empty"></textarea>
+</div>
+
+@if (PayloadError is { } payloadError)
+{
+    <div class="notice error"><strong>Payload is not valid JSON.</strong> @payloadError</div>
+}
+@if (_result is not null)
+{
+    <div class="notice">@_result</div>
+}
+@if (_failure is not null)
+{
+    <div class="notice error"><strong>Not delivered.</strong> @_failure</div>
+}
+
+@code {
+    private string _name = string.Empty;
+    private string _correlationId = string.Empty;
+    private string _payload = string.Empty;
+    private string? _result;
+    private string? _failure;
+    private bool _busy;
+
+    /// <summary>Validated here so a typo fails before it reaches a workflow, not inside one.</summary>
+    private string? PayloadError
+    {
+        get
+        {
+            var text = _payload.Trim();
+            if (text.Length == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                using var _ = System.Text.Json.JsonDocument.Parse(text);
+                return null;
+            }
+            catch (System.Text.Json.JsonException e)
+            {
+                return e.Message;
+            }
+        }
+    }
+
+    private bool Ready => _name.Trim().Length > 0 && _correlationId.Trim().Length > 0 && PayloadError is null;
+
+    private async Task SendAsync()
+    {
+        _busy = true;
+        _result = null;
+        _failure = null;
+        try
+        {
+            _ = await Api.SignalAsync(_name.Trim(), _correlationId.Trim(), _payload.Trim())
+                ? _result = "Delivered."
+                : _failure = "No instance is waiting on that name and correlation id.";
+        }
+        catch (HttpRequestException e)
+        {
+            _failure = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

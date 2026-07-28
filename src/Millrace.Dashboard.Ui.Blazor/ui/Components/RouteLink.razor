@@ -1,0 +1,21 @@
+@* An internal link. See Navigator for why this is not just an anchor. *@
+
+<a href="#@Route" class="@Class" @onclick="Go" @onclick:preventDefault>@ChildContent</a>
+
+@code {
+    [CascadingParameter]
+    public Navigator? Navigator { get; set; }
+
+    /// <summary>The route to go to, such as <c>/jobs</c> — without the leading <c>#</c>.</summary>
+    [Parameter]
+    [EditorRequired]
+    public required string Route { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private Task Go() => Navigator?.GoAsync(Route) ?? Task.CompletedTask;
+}

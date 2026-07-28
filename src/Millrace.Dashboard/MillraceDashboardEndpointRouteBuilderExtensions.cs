@@ -164,9 +164,30 @@ public static class MillraceDashboardEndpointRouteBuilderExtensions
             .ExcludeFromDescription() // Static assets are not part of the REST contract.
             .AddEndpointFilter(filter);
 
-        // The mount root without a trailing slash, so /millrace/ui works as well as /millrace/ui/.
-        endpoints.MapGet($"{prefix}/ui", () =>
+        // The mount root without a trailing slash redirects to the one with it, rather than serving
+        // the document at both.
+        //
+        // Serving it at both was the previous behaviour and it did not work. Every UI references its
+        // assets relatively — the React bundle with ./assets/app.js, Angular and Blazor with
+        // <base href="./"> — and a browser resolves those against the *directory* of the current
+        // URL. At /millrace/ui that directory is /millrace/, so the app asks for
+        // /millrace/_framework/... and gets a 404 for every asset. The document arrived, the page
+        // stayed blank, and a test asserting the document arrives passed the whole time.
+        //
+        // 302 rather than 301: a permanent redirect is cached by the browser against the origin, and
+        // a consumer who later remounts the dashboard at a different prefix would be fighting it.
+        //
+        // The trailing slash is checked against the request rather than left to routing, because
+        // routing does not distinguish them — this pattern matches "/ui" and "/ui/" alike, so
+        // redirecting unconditionally sends the browser to a URL that redirects to itself. That is a
+        // loop, and it is what the first version of this did.
+        endpoints.MapGet($"{prefix}/ui", (HttpContext context) =>
             {
+                if (context.Request.Path.Value?.EndsWith('/') != true)
+                {
+                    return Results.Redirect($"{prefix}/ui/");
+                }
+
                 var entry = ui.OpenEntryDocument(out var entryType);
                 return Results.Stream(entry, entryType);
             })

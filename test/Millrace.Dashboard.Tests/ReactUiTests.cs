@@ -40,27 +40,38 @@ public sealed class ReactUiTests
         return app.GetTestClient();
     }
 
+    /// <summary>
+    /// The mount root redirects rather than serving the document at two URLs.
+    /// </summary>
+    /// <remarks>
+    /// This asserted a 200 and a body until the Blazor UI was first opened in a browser, where it
+    /// rendered nothing: the bundle references its assets relatively, and a browser resolves those
+    /// against the directory of the current URL. Without the trailing slash that directory is the
+    /// mount prefix, so every asset 404s while the document itself arrives perfectly — which is what
+    /// the old assertion was measuring.
+    /// </remarks>
     [Fact]
-    public async Task The_entry_document_is_served_at_the_ui_root()
+    public async Task The_ui_root_redirects_to_the_trailing_slash_so_relative_assets_resolve()
     {
         var client = await StartAsync();
 
         var response = await client.GetAsync("/millrace/ui", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Found, response.StatusCode);
+        Assert.Equal("/millrace/ui/", response.Headers.Location?.ToString());
+    }
+
+    [Fact]
+    public async Task The_entry_document_is_served_with_a_trailing_slash()
+    {
+        var client = await StartAsync();
+
+        var response = await client.GetAsync("/millrace/ui/", TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
         Assert.Contains("<div id=\"root\">", body, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task The_entry_document_is_also_served_with_a_trailing_slash()
-    {
-        var client = await StartAsync();
-
-        var response = await client.GetAsync("/millrace/ui/", TestContext.Current.CancellationToken);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -125,10 +136,14 @@ public sealed class ReactUiTests
         // The bundle derives the API base from its own path, so it has to live at {prefix}/ui.
         var client = await StartAsync("/ops/millrace");
 
-        var mounted = await client.GetAsync("/ops/millrace/ui", TestContext.Current.CancellationToken);
+        var mounted = await client.GetAsync("/ops/millrace/ui/", TestContext.Current.CancellationToken);
+        var mountRoot = await client.GetAsync("/ops/millrace/ui", TestContext.Current.CancellationToken);
         var elsewhere = await client.GetAsync("/millrace/ui", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, mounted.StatusCode);
+        // The redirect follows the prefix too, rather than being hard-coded to /millrace.
+        Assert.Equal(HttpStatusCode.Found, mountRoot.StatusCode);
+        Assert.Equal("/ops/millrace/ui/", mountRoot.Headers.Location?.ToString());
         Assert.Equal(HttpStatusCode.NotFound, elsewhere.StatusCode);
     }
 

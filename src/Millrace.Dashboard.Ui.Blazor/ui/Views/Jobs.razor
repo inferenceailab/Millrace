@@ -1,0 +1,136 @@
+@namespace Millrace.Dashboard.Ui.Blazor.App.Views
+@inject DashboardClient Api
+
+<div class="controls">
+    <div class="field">
+        <label for="job-state">State</label>
+        <select id="job-state" value="@(_state?.ToString() ?? "")"
+                @onchange="e => SetState(e.Value as string)">
+            <option value="">Any</option>
+            @foreach (var state in Enum.GetValues<JobState>())
+            {
+                <option value="@state">@state</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="job-queue">Queue</label>
+        <input id="job-queue" type="text" placeholder="Any" value="@_queue"
+               @onchange="e => SetQueue(e.Value as string)" />
+    </div>
+</div>
+
+@if (_loading)
+{
+    <Loading />
+}
+@if (_error is not null)
+{
+    <ErrorNotice Message="@_error" />
+}
+@if (_page is not null)
+{
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>State</th>
+                    <th>Job</th>
+                    <th>Queue</th>
+                    <th>Created</th>
+                    <th class="num">Attempts</th>
+                    <th class="num">Failures</th>
+                    <th class="num">Interrupted</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_page.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="muted">No jobs match.</td>
+                    </tr>
+                }
+                @foreach (var job in _page.Items)
+                {
+                    <tr>
+                        <td><Chip State="@job.State.ToString()" /></td>
+                        <td>
+                            <RouteLink Route="@($"/jobs/{job.Id}")">@job.MethodName</RouteLink>
+                            <div class="muted mono">@job.TypeName</div>
+                        </td>
+                        <td>@job.Queue</td>
+                        <td>@Format.Time(job.CreatedAt)</td>
+                        <td class="num">@job.Attempt</td>
+                        <td class="num">@job.Failures</td>
+                        <td class="num">@job.Interruptions</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <Pager NextCursor="@_page.NextCursor"
+           CanGoBack="_cursors.CanGoBack"
+           Count="_page.Items.Count"
+           OnNext="NextPageAsync"
+           OnBack="PreviousPageAsync" />
+}
+
+@code {
+    private readonly CursorStack _cursors = new();
+    private Page<JobSummary>? _page;
+    private JobState? _state;
+    private string _queue = string.Empty;
+    private string? _error;
+    private bool _loading = true;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _page = await Api.GetJobsAsync(_state, _queue, _cursors.Cursor);
+        }
+        catch (HttpRequestException e)
+        {
+            _error = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task SetState(string? value)
+    {
+        _state = Enum.TryParse<JobState>(value, out var state) ? state : null;
+        // The cursors already visited describe the old query.
+        _cursors.Reset();
+        return LoadAsync();
+    }
+
+    private Task SetQueue(string? value)
+    {
+        _queue = value ?? string.Empty;
+        _cursors.Reset();
+        return LoadAsync();
+    }
+
+    private Task NextPageAsync()
+    {
+        if (_page?.NextCursor is { } cursor)
+        {
+            _cursors.Next(cursor);
+        }
+
+        return LoadAsync();
+    }
+
+    private Task PreviousPageAsync()
+    {
+        _cursors.Back();
+        return LoadAsync();
+    }
+}

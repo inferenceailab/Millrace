@@ -1,0 +1,248 @@
+@namespace Millrace.Dashboard.Ui.Blazor.App.Views
+@inject DashboardClient Api
+
+<p><RouteLink Route="/jobs">← All jobs</RouteLink></p>
+
+@if (_loading)
+{
+    <Loading />
+}
+else if (_error is not null)
+{
+    <ErrorNotice Message="@_error" />
+}
+else if (_details is { } data)
+{
+    <h2>@data.Summary.MethodName <Chip State="@data.Summary.State.ToString()" /></h2>
+
+    <div class="controls">
+        <button type="button" @onclick="CancelAsync" disabled="@(_busy || !Cancellable)">Cancel</button>
+        <button type="button" @onclick="RunNowAsync" disabled="@(_busy || !RunnableNow)">Run now</button>
+        <button type="button" @onclick="RequeueAsync" disabled="@(_busy || !Requeueable)">Requeue</button>
+        @if (_action is not null)
+        {
+            <span class="muted">@_action</span>
+        }
+        @if (_actionError is not null)
+        {
+            <span class="overdue">@_actionError</span>
+        }
+    </div>
+    <p class="muted">
+        @if (Cancellable)
+        {
+            @:Cancelling a running job is cooperative — it is asked to stop, and one about to finish may still succeed.
+        }
+        else if (Requeueable)
+        {
+            @:Requeue runs this work again as a <em>new</em> job. This record has finished and stays as it is; the new job links back to it.
+        }
+    </p>
+
+    <dl class="detail-grid">
+        <dt>Id</dt>
+        <dd class="mono">@data.Summary.Id</dd>
+        <dt>Type</dt>
+        <dd class="mono">@data.Summary.TypeName</dd>
+        <dt>Queue</dt>
+        <dd>@data.Summary.Queue · priority @data.Summary.Priority</dd>
+        <dt>Created</dt>
+        <dd>@Format.Time(data.Summary.CreatedAt)</dd>
+        <dt>Due</dt>
+        <dd>@Format.Time(data.Summary.DueAt)</dd>
+        <dt>Finished</dt>
+        <dd>@Format.Time(data.Summary.FinishedAt)</dd>
+        <dt>Attempts</dt>
+        <dd>
+            @data.Summary.Attempt started · @data.Summary.Failures failed ·
+            @data.Summary.Interruptions interrupted
+            <div class="muted">
+                Interruptions are executions killed by infrastructure — crashes, deploys, lost leases
+                — rather than by failing code. Per-attempt history is not stored, so there is no
+                timeline.
+            </div>
+        </dd>
+        <dt>Worker</dt>
+        <dd>@(data.Summary.WorkerId ?? "—")</dd>
+        <dt>Lease until</dt>
+        <dd>@Format.Time(data.LeaseUntil)</dd>
+        <dt>Tenant</dt>
+        <dd>@(data.Summary.TenantId ?? "—")</dd>
+        <dt>Idempotency key</dt>
+        <dd class="mono">@(data.IdempotencyKey ?? "—")</dd>
+        <dt>Cancel requested</dt>
+        <dd>@(data.CancelRequested ? "yes" : "no")</dd>
+        @if (data.ParentId is { } parentId)
+        {
+            <dt>Continuation of</dt>
+            <dd><RouteLink Class="mono" Route="@($"/jobs/{parentId}")">@parentId</RouteLink></dd>
+        }
+    </dl>
+
+    <h2>Arguments</h2>
+    <pre>@ArgumentsText</pre>
+
+    @if (data.Attempts.Count > 0)
+    {
+        <h2>Attempts</h2>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="num">#</th>
+                        <th>Outcome</th>
+                        <th>Ended</th>
+                        <th>Worker</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var attempt in data.Attempts)
+                    {
+                        <tr>
+                            <td class="num">@attempt.Attempt</td>
+                            <td>
+                                <Chip State="@(attempt.Outcome == JobAttemptOutcome.Failed ? "Failed" : "Cancelled")" />
+                                @if (attempt.Outcome == JobAttemptOutcome.Interrupted)
+                                {
+                                    <span> interrupted</span>
+                                }
+                            </td>
+                            <td>@Format.Time(attempt.RecordedAt)</td>
+                            <td class="mono">@(attempt.WorkerId ?? "—")</td>
+                            <td>
+                                @if (attempt.Error is { } error)
+                                {
+                                    <pre>@error</pre>
+                                }
+                                else
+                                {
+                                    <span class="muted">no verdict recorded</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="muted" style="margin-top: 12px">
+            Only failed and interrupted executions are listed — a successful attempt records nothing,
+            so a job that worked first time shows none. Bounded per job, while the counts above are
+            exact.
+        </p>
+    }
+
+    @if (data.LastError is { } lastError)
+    {
+        <h2>Last error</h2>
+        <pre>@lastError</pre>
+    }
+}
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public required JobId Id { get; set; }
+
+    [CascadingParameter]
+    public Navigator? Navigator { get; set; }
+
+    private JobDetails? _details;
+    private string? _error;
+    private string? _action;
+    private string? _actionError;
+    private bool _loading = true;
+    private bool _busy;
+
+    // Which actions apply to which state is a fact about the contract, and this UI has the contract
+    // rather than a mirror of it (§11.23) — so these read the same predicates the engine does
+    // instead of restating them the way the TypeScript client has to.
+    private bool Cancellable => _details is not null && !_details.Summary.State.IsTerminal();
+
+    private bool RunnableNow => _details?.Summary.State == JobState.Failed;
+
+    private bool Requeueable => _details is not null
+        && (_details.Summary.State.IsTerminal() || _details.Summary.State == JobState.Failed);
+
+    private string ArgumentsText
+    {
+        get
+        {
+            var invocation = _details?.Invocation;
+            if (invocation is null || invocation.ParameterTypes.Count == 0)
+            {
+                return "(none)";
+            }
+
+            return string.Join("\n\n", invocation.ParameterTypes.Select((type, i) =>
+                $"{type}\n  {(i < invocation.ArgumentsJson.Count ? invocation.ArgumentsJson[i] : "null")}"));
+        }
+    }
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _details = await Api.GetJobAsync(Id);
+        }
+        catch (HttpRequestException e)
+        {
+            _error = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task CancelAsync() => RunAsync(async () =>
+    {
+        await Api.CancelAsync(Id);
+        // Deliberately not "cancelled": a running job is asked to stop, and the answer does not
+        // promise the work did not happen.
+        return "Cancellation requested.";
+    });
+
+    private Task RunNowAsync() => RunAsync(async () =>
+    {
+        await Api.RunNowAsync(Id);
+        return "Running now.";
+    });
+
+    private Task RequeueAsync() => RunAsync(async () =>
+    {
+        var requeued = await Api.RequeueAsync(Id);
+        // Follow the new job: the record on screen has finished and will not change again, so
+        // leaving the operator on it is the one thing the button should not do.
+        if (Navigator is not null)
+        {
+            await Navigator.GoAsync($"/jobs/{requeued.Id}");
+        }
+
+        return "Requeued.";
+    });
+
+    private async Task RunAsync(Func<Task<string>> action)
+    {
+        _busy = true;
+        _action = null;
+        _actionError = null;
+        try
+        {
+            _action = await action();
+            await LoadAsync();
+        }
+        catch (HttpRequestException e)
+        {
+            _actionError = Format.ErrorMessage(e);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

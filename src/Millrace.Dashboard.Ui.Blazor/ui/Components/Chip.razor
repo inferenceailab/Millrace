@@ -1,0 +1,9 @@
+@* The dot carries colour, the text carries meaning — never colour alone. *@
+
+<span class="chip" data-state="@State">@State</span>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public required string State { get; set; }
+}
