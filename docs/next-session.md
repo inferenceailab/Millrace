@@ -1,8 +1,7 @@
 # Picking this up again
 
-Written 2026-07-26, at the end of the session that closed milestone 0.5, and revised later the same
-day — after `0.1.0-alpha.1` was published and [#99](https://github.com/inferenceailab/Millrace/issues/99)
-closed.
+Written 2026-07-26 at the end of the session that closed milestone 0.5, and rewritten on 2026-07-28
+when the 1.0 milestone emptied.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -13,28 +12,27 @@ Delete anything that stops being true.
 
 ## Start here
 
-Nested sagas ([#119](https://github.com/inferenceailab/Millrace/pull/119), §11.35) and the Blazor UI
-([#120](https://github.com/inferenceailab/Millrace/pull/120), §11.36) are both merged. `main` builds
-clean and the whole suite passes.
+**The 1.0 milestone is empty.** Seven issues closed, then the last two on 2026-07-28:
 
-**[#49](https://github.com/inferenceailab/Millrace/issues/49) is done** ([#124](https://github.com/inferenceailab/Millrace/pull/124),
-§11.37): `bench/` holds a harness, [`benchmarks.md`](benchmarks.md) holds the numbers and the
-caveats. Millrace is 1.8× Hangfire enqueueing, 3.2–3.4× draining, 2.5–5× on median latency, and 5.3×
-WorkflowCore on workflow instances.
+- **[#122](https://github.com/inferenceailab/Millrace/issues/122)** ([#127](https://github.com/inferenceailab/Millrace/pull/127),
+  §11.38) gave the Blazor dashboard the six views the other two have. It also found that the UI
+  shipped in #120 had *never been run* — it rendered nothing on first load, for three independent
+  reasons no static check could see.
+- **[#48](https://github.com/inferenceailab/Millrace/issues/48)** ([#128](https://github.com/inferenceailab/Millrace/pull/128),
+  §11.39) is the documentation site: docfx, live at
+  <https://inferenceailab.github.io/Millrace/>, guide by hand and API reference generated from the
+  XML comments. GitHub Pages is enabled and the first deploy landed and was verified in a browser.
 
-**Two of 1.0's three remaining issues are now [#48](https://github.com/inferenceailab/Millrace/issues/48)
-and [#122](https://github.com/inferenceailab/Millrace/issues/122)** — see the table below. #47 was
-closed on its own terms and the layout work it never asked for became #122; what that issue records
-and the parity check does not is that `SignalAsync` and `GetInfoAsync` are on the Blazor client but
-called from no page, so an operator cannot raise a signal from that dashboard at all. §11.36's
-parity claim is one-directional — a bundle never mentioning an endpoint does not call it — and both
-literals are present, so it passes.
+`main` builds clean, the whole suite passes, and the docs deploy on every push.
+
+**So the only open question left is whether to tag 1.0**, and that is a promise, not a task — see
+below. The only open story is [#126](https://github.com/inferenceailab/Millrace/issues/126).
 
 ## Nothing is blocking on a person
 
 Publishing credentials were the last blocker and they are done, proven by a real release rather than
-by configuration looking right. Nothing waits on anyone now — 1.0 is two issues, and only
-[#48](https://github.com/inferenceailab/Millrace/issues/48) wants a decision before it wants code.
+by configuration looking right. GitHub Pages needed enabling once and now is. Nothing waits on
+anyone.
 
 ## Releasing
 
@@ -52,26 +50,68 @@ hyphen, so `v1.2.3-rc.1` marks itself correctly without anyone remembering to.
 **`release.yml`'s actions only run on a tag**, so CI never exercises them. They went from v4 to
 `checkout@v7`, `setup-dotnet@v6`, `setup-node@v7` and `upload-artifact@v7` on 2026-07-26 and have
 not run since — the next release is their first real test. This is the same blind spot §11.31
-identified when it moved packing onto every push, and it has not been closed for this half.
+identified when it moved packing onto every push, and it is **still open**.
+
+`docs.yml` (§11.39) is the shape of the fix: it builds on pull requests and deploys only from
+`main`, so the half that can fail has already run before anything merges. `release.yml` cannot copy
+that exactly — it publishes to nuget.org, which has no delete — but a prerelease tag is the same
+idea at the cost of a version number.
 
 **The trust policy is pinned to the repository and to the file name `release.yml`.** Renaming or
 moving that file breaks publishing, which is the trade §11.33 made deliberately: authority belongs
 to the thing that runs.
 
-## What 1.0 still needs
+## The 1.0 tag is a decision, not a task
 
-Detail is in the issues; the ordering argument is not.
+Everything 1.0 scoped is built. What remains is deciding to **make the promise**, and nobody should
+make it by reflex because the issue list happens to be empty.
 
-| | Why it is where it is |
-|---|---|
-| [#122](https://github.com/inferenceailab/Millrace/issues/122) Blazor layout | The Blazor UI shipped in [#120](https://github.com/inferenceailab/Millrace/pull/120) as **one page**, where the other two have six views. Codeable today, and the issue names the two client methods no page reaches. |
-| [#48](https://github.com/inferenceailab/Millrace/issues/48) Docs site | Now that packages can actually be installed, this is what makes them usable. **Still not codeable** — nobody has chosen a generator (docfx, Statiq, something else), and that is a §11 decision rather than a task. It is now the only thing in 1.0 that cannot be started cold. |
+Tagging `v1.0.0` says the storage contract and the v1 REST contract are stable. Three things worth
+weighing first:
+
+- **Is the storage contract done being learned from?** It grew clause 7 in §11.16 and the
+  compensation-recovery surface in §11.30 — both discovered by building on it. A third provider
+  (SQLite is next) is the cheapest way to find out whether the contract is finished, and finding out
+  *after* 1.0 is expensive in a way finding out before is not.
+- **`Millrace.Storage.Verification` still suppresses `CS1591`** (§11.34). It is the package a
+  community provider author reads, and it is the one with undocumented public members.
+- **The version has been deliberately conservative** and the README says so. Bumping it is a
+  separate act of judgement from finishing the work, which is exactly why §11.31 refused to bump it
+  when the pipeline landed.
+
+A `v1.0.0-rc.1` is the cheap way to exercise the release path again without making the promise —
+and, per the section above, that path has not run since its actions were upgraded.
+
+**[#126](https://github.com/inferenceailab/Millrace/issues/126)** is the only open story: execute
+the UI bundles in a real browser before they ship. It is worth doing before 1.0 rather than after,
+because it is the check whose absence §11.38 is entirely about.
 
 ## Things that will bite you
 
 **Check CI before merging.** `main` was red for four commits last session while PRs were merged into
 it, and the cause — the Angular UI had not built since #88 — was invisible because the build failed
 before the tests ran. Two test failures were hiding behind it. `gh pr checks <n>` costs seconds.
+
+**"It builds clean" still means nothing about whether it renders.** §11.38 learned this from the
+Blazor UI and then the docs site collected it again the same week: docfx reported zero warnings, 741
+API items, every cross-reference resolving and all 8,850 internal links valid — and the logo was
+rendering at 69 pixels square on top of the brand text. The first fix (explicit `width`/`height` on
+the SVG) did nothing, because the template injects it client-side as `<img id="logo">` and sizes it
+from that id, so a class selector loses on specificity. One screenshot found both facts.
+
+**Open what you built.** [#126](https://github.com/inferenceailab/Millrace/issues/126) exists to
+make that a check rather than a habit.
+
+**Measure the exit code of the thing you are measuring.** Checking whether docfx's
+`--warningsAsErrors` actually fails a build, the first attempt read the exit code of `tail` through
+a pipe, got 0, and would have concluded the gate does not work — shipping a CI check that never
+fires. docfx really exits **−1** while printing *"Build succeeded with warning"*, so its text and
+its exit code disagree and only one of them is load-bearing. This is the same failure as the
+benchmark numbers in #49: the measurement was wrong in a way the output looked fine about.
+
+**A checker that has never failed is not a checker.** `scripts/check-docs-links.ps1` was verified by
+breaking a link on purpose and watching it exit 1. Worth the sixty seconds every time — the test
+that asserted a 200 on `{prefix}/ui` passed for months while the page was blank (§11.38).
 
 **"Works on my machine" caused every real defect last session**, without exception:
 - `@angular/cli` was never declared as a dependency; `npx` had fetched it locally, so it built here
@@ -154,6 +194,19 @@ Newly true, and worth the same scrutiny in a few months:
   something a reader can check: the medians agree to within 0.4% while individual runs vary by 15%.
   That pair is also the only honest answer to "is this difference real?" — under about 10%, it is
   not.
+
+And from the docs site (§11.39), too new to have earned anything but worth watching:
+
+- **`CS1591` finally paid out.** §11.34 made 649 public members documented and nothing published
+  them; the question it left open was whether that produced comments worth reading or comments
+  written to satisfy a compiler. The generated reference is the answer, and it is now readable in
+  public — which is also the forcing function that keeps it honest.
+- **The link checker exists because docfx does not check the links it does not own.** It validates
+  cross-references and API links; an ordinary `[jobs](jobs.md)` at a renamed page renders as a link
+  to nowhere and builds clean.
+- **The docs build proves the no-Node claim rather than asserting it.** `-p:SkipUiBuild=true` plus a
+  workflow that installs no Node means anything reintroducing the dependency fails the job. It
+  passed on a real runner, which is a stronger statement than it passing here.
 
 One that has not earned anything yet: **the benchmark harness only runs when someone runs it.** It
 compiles in CI and never executes there, so it will rot the way any unexecuted code does. The
