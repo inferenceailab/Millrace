@@ -1,9 +1,9 @@
 # Backlog
 
-> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-27 by `scripts/generate-backlog.ps1`.
+> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-28 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
-**60 done · 7 open** (of which 0 blocked on an unresolved spike).
+**62 done · 6 open** (of which 0 blocked on an unresolved spike).
 
 ## Epics
 
@@ -106,13 +106,13 @@ Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: cr
 | # | Story | Area | State |
 |---|---|---|---|
 | [#47](https://github.com/inferenceailab/Millrace/issues/47) | Blazor UI over the frozen contract | dashboard | done |
-| [#48](https://github.com/inferenceailab/Millrace/issues/48) | Documentation site | docs | open |
+| [#48](https://github.com/inferenceailab/Millrace/issues/48) | Documentation site | docs | done |
 | [#49](https://github.com/inferenceailab/Millrace/issues/49) | Benchmarks against Hangfire and WorkflowCore | docs | done |
 | [#77](https://github.com/inferenceailab/Millrace/issues/77) | Sagas: nested sagas | workflow | done |
 | [#97](https://github.com/inferenceailab/Millrace/issues/97) | Run a failed job now, without waiting out its backoff |  | done |
 | [#98](https://github.com/inferenceailab/Millrace/issues/98) | Packaging and release: nothing publishes today |  | done |
 | [#99](https://github.com/inferenceailab/Millrace/issues/99) | Document the 164 undocumented public members |  | done |
-| [#122](https://github.com/inferenceailab/Millrace/issues/122) | Blazor UI: multi-view layout to match React and Angular | dashboard | open |
+| [#122](https://github.com/inferenceailab/Millrace/issues/122) | Blazor UI: multi-view layout to match React and Angular | dashboard | done |
 
 ## Not yet scheduled
 
@@ -121,3 +121,4 @@ Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: cr
 | [#86](https://github.com/inferenceailab/Millrace/issues/86) | Spike: should the three UIs share one rendered implementation (web components) or one non-visual core? |  | done |
 | [#87](https://github.com/inferenceailab/Millrace/issues/87) | Flaky: A_delay_defers_the_rest_of_the_flow_until_it_comes_due fails under parallel suite load |  | done |
 | [#89](https://github.com/inferenceailab/Millrace/issues/89) | Enum values serialize as integers; every UI declares them as strings |  | done |
+| [#126](https://github.com/inferenceailab/Millrace/issues/126) | Execute the UI bundles in a browser before they ship | dashboard | open |
