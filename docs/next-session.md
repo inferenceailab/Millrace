@@ -12,7 +12,21 @@ Delete anything that stops being true.
 
 ## Start here
 
-**The 1.0 milestone is empty.** Seven issues closed, then the last two on 2026-07-28:
+**Millrace 1.0.0 is released.** Nine packages on nuget.org, the milestone is closed, and the
+storage and v1 REST contracts are now stable promises (§11.41) rather than working agreements.
+`v1.0.0-rc.1` went out first to exercise the publishing path; `v1.0.0` followed the same day.
+
+**That changes how this repository works, and it is the one thing to internalise before touching
+anything.** Until today, a bad decision could be corrected in the next commit. Now
+`IJobStorage`, `IWorkflowStorage`, `IMonitoringStorage`, the records they exchange and the
+`/api/v1` surface cannot break within 1.x. Adding a member to any of those interfaces breaks every
+implementor, so it waits for 2.0 or arrives as a separate interface the way §11.14 put monitoring
+in its own. What is *not* frozen — the engine, the workers, the providers' SQL, the UIs, and the
+conformance kit, which is a test suite and expected to grow — is where the freedom now lives.
+
+### How it got here
+
+The 1.0 milestone closed with eight issues, the last three on 2026-07-28:
 
 - **[#122](https://github.com/inferenceailab/Millrace/issues/122)** ([#127](https://github.com/inferenceailab/Millrace/pull/127),
   §11.38) gave the Blazor dashboard the six views the other two have. It also found that the UI
@@ -29,15 +43,19 @@ Kestrel host and drives it with Chromium, so a UI that renders nothing fails the
 shipping.
 
 `main` builds clean, the whole suite passes, the docs deploy on every push, and **no non-epic issue
-is open**.
-
-**So the only thing left is whether to tag 1.0**, and that is a promise, not a task — see below.
+is open**. There is no backlog: the next session picks what 1.1 or 2.0 should be, rather than
+finishing something.
 
 ## Nothing is blocking on a person
 
-Publishing credentials were the last blocker and they are done, proven by a real release rather than
-by configuration looking right. GitHub Pages needed enabling once and now is. Nothing waits on
+Publishing credentials were the last blocker and they are done, proven by three real releases rather
+than by configuration looking right. GitHub Pages needed enabling once and now is. Nothing waits on
 anyone.
+
+What *does* want a person is direction: with 1.0 out and no backlog, the next decision is what 1.x
+is for. The obvious candidate is the SQLite provider, because it is the cheapest test of whether the
+contract just frozen is actually finished — but that is a judgement about priorities, not a task
+waiting to be picked up.
 
 ## Releasing
 
@@ -62,41 +80,44 @@ tags. `docs.yml` (§11.39) is the shape of the fix — build on pull requests, d
 — and `release.yml` cannot copy it exactly, because it publishes somewhere with no delete. A
 prerelease tag is the same idea at the cost of a version number, and it is the habit to keep.
 
-**Verify the published packages, not just the green job.** After `v1.0.0-rc.1` all nine were
-confirmed indexed on nuget.org and then installed into a throwaway console app that enqueued a job —
-about two minutes' work, and the only thing that actually proves a consumer can use what was
-shipped. `dotnet nuget push` reporting success means the bytes were accepted, not that they work.
+**Verify the published packages, not just the green job.** After both tags all nine were confirmed
+indexed on nuget.org and then installed into a throwaway console app that enqueued a job — about two
+minutes, and the only thing that actually proves a consumer can use what shipped. `dotnet nuget
+push` reporting success means the bytes were accepted, not that they work.
+
+Two traps in that verification, both hit on 1.0.0. **nuget.org has two indexes**: the flat container
+(package content) publishes within a few minutes, and the registration index that `dotnet add
+package` resolves against lags behind it — so "indexed" by one measure is still unusable by the
+other. And **your own machine caches the failure**: the first `dotnet add package Millrace` after
+1.0.0 went live said *"there are no stable versions available"* long after there were, because the
+NuGet HTTP cache had kept the earlier answer. `dotnet nuget locals http-cache --clear` before
+concluding anything.
+
+**Documentation ships inside the packages, so it lands *before* the tag.**
+`Directory.Build.targets` packs the repository root `README.md` into every package. Tagging 1.0.0
+with "Status: alpha" still in it would have embedded that in nine packages permanently — nuget.org
+has no delete. Any future version bump needs the same ordering: docs merged, then tag.
 
 **The trust policy is pinned to the repository and to the file name `release.yml`.** Renaming or
 moving that file breaks publishing, which is the trade §11.33 made deliberately: authority belongs
 to the thing that runs.
 
-## The 1.0 tag is a decision, not a task
+## What 1.0 was shipped knowing
 
-**`v1.0.0-rc.1` is published** (2026-07-28) — a candidate, deliberately not the promise. Everything
-1.0 scoped is built and the release path is proven. What remains is deciding to **make the
-promise**, and nobody should make it by reflex because the issue list happens to be empty.
+Two things were weighed and accepted rather than overlooked. Both are more expensive to change today
+than they were yesterday, which is exactly why they are written down.
 
-Tagging `v1.0.0` says the storage contract and the v1 REST contract are stable. Three things worth
-weighing first:
+- **The storage contract may not be finished being learned from.** It grew clause 7 in §11.16 and
+  the compensation-recovery surface in §11.30, both discovered by *building on it*. Only two
+  providers plus the in-memory one have ever exercised it. **A third is the cheapest way to find
+  out**, and SQLite was already next on the roadmap. If it finds a gap, that gap is now a 2.0
+  conversation or a new interface (§11.14's shape), not an edit.
+- **`Millrace.Storage.Verification` still suppresses `CS1591`** (§11.34) for its ~110 `[Fact]`
+  methods. It is the package a community provider author reads, and it is the one with undocumented
+  public members. 1.0 does not make that worse — it makes it visible to more people.
 
-- **Is the storage contract done being learned from?** It grew clause 7 in §11.16 and the
-  compensation-recovery surface in §11.30 — both discovered by building on it. A third provider
-  (SQLite is next) is the cheapest way to find out whether the contract is finished, and finding out
-  *after* 1.0 is expensive in a way finding out before is not.
-- **`Millrace.Storage.Verification` still suppresses `CS1591`** (§11.34). It is the package a
-  community provider author reads, and it is the one with undocumented public members.
-- **The version has been deliberately conservative** and the README says so. Bumping it is a
-  separate act of judgement from finishing the work, which is exactly why §11.31 refused to bump it
-  when the pipeline landed.
-
-The rc is out, so the mechanical work is done and only the judgement is left. If the answer is yes,
-`v1.0.0` is one tag; if it is "not yet", `rc.2` costs nothing but a number, and the rc is what an
-evaluator can install in the meantime.
-
-What is *no longer* an argument against tagging: the three UIs now have an automated proof that they
-render and can act (§11.40). Before #131 they had none — and in that gap the Blazor UI shipped
-rendering nothing at all, while a server defect left the mount root blank for **all three**.
+Neither is a defect. Both are the kind of thing that is obvious in hindsight and invisible in a
+changelog.
 
 ## Things that will bite you
 
