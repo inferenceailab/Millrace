@@ -99,7 +99,7 @@ OpenTelemetry, SQL Server provider, batch enqueue, Millrace.Testing, Angular UI.
 | [#79](https://github.com/inferenceailab/Millrace/issues/79) | Sagas: what happens when a compensation itself fails | workflow | done |
 | [#83](https://github.com/inferenceailab/Millrace/issues/83) | The test harness reimplements worker logic and can silently diverge from it | ops | done |
 
-## 1.0 — Hardening & credibility
+## 1.0 — Hardening & credibility — **complete**
 
 Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: credibility.
 
