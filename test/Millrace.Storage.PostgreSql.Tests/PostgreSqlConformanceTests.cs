@@ -84,7 +84,9 @@ internal static class PostgresTestDatabase
             {
                 try
                 {
-                    var container = new PostgreSqlBuilder().WithImage("postgres:17-alpine").Build();
+                    // The image goes to the constructor: Testcontainers 4.13 obsoleted the
+                    // parameterless one, and warnings are errors here.
+                    var container = new PostgreSqlBuilder("postgres:17-alpine").Build();
                     await container.StartAsync();
                     // Not disposed deliberately: Testcontainers' reaper removes it when the
                     // test process exits.

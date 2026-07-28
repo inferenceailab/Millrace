@@ -69,7 +69,11 @@ internal static class SqlServerTestDatabase
             {
                 try
                 {
-                    var container = new MsSqlBuilder().Build();
+                    // Testcontainers 4.13 obsoleted the parameterless constructor, and warnings are
+                    // errors here. This is the version the library defaulted to before, stated
+                    // explicitly — so the conformance run pins its database rather than inheriting
+                    // whatever a future package version decides to default to.
+                    var container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04").Build();
                     await container.StartAsync();
                     _connectionString = container.GetConnectionString();
                     return _connectionString;
