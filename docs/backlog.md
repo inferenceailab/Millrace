@@ -3,7 +3,7 @@
 > **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-28 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
-**62 done · 6 open** (of which 0 blocked on an unresolved spike).
+**63 done · 5 open** (of which 0 blocked on an unresolved spike).
 
 ## Epics
 
@@ -121,4 +121,4 @@ Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: cr
 | [#86](https://github.com/inferenceailab/Millrace/issues/86) | Spike: should the three UIs share one rendered implementation (web components) or one non-visual core? |  | done |
 | [#87](https://github.com/inferenceailab/Millrace/issues/87) | Flaky: A_delay_defers_the_rest_of_the_flow_until_it_comes_due fails under parallel suite load |  | done |
 | [#89](https://github.com/inferenceailab/Millrace/issues/89) | Enum values serialize as integers; every UI declares them as strings |  | done |
-| [#126](https://github.com/inferenceailab/Millrace/issues/126) | Execute the UI bundles in a browser before they ship | dashboard | open |
+| [#126](https://github.com/inferenceailab/Millrace/issues/126) | Execute the UI bundles in a browser before they ship | dashboard | done |
