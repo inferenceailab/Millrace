@@ -67,3 +67,6 @@ Worth knowing if you are assessing supply-chain risk:
   packages into a throwaway project and runs a job from them, and only then requests the publishing
   key.
 - **Packages are built from a commit on `main`**, which requires a pull request with passing checks.
+- **Workflows may only use an allowlist of actions** — GitHub-owned ones, plus `NuGet/login`. The
+  verified-creator marketplace is deliberately *not* trusted wholesale, so a compromised third-party
+  action cannot be introduced without a repository settings change.
