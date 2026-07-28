@@ -41,26 +41,31 @@ anyone.
 
 ## Releasing
 
-**It works, and it has run for real.** `v0.1.0-alpha.1` put all eight packages on nuget.org on
-2026-07-26, first attempt. Tag `vX.Y.Z` and the rest is automatic: pack, smoke-test the built
-artifacts, exchange a GitHub OIDC token for a one-hour nuget.org key (§11.33), push, create the
-GitHub release. No secret is stored, so nothing expires and nothing needs rotating.
+**It works, and it has now run twice.** `v0.1.0-alpha.1` put eight packages on nuget.org on
+2026-07-26; `v1.0.0-rc.1` put **nine** there on 2026-07-28, first attempt again. Tag `vX.Y.Z` and
+the rest is automatic: pack, smoke-test the built artifacts, exchange a GitHub OIDC token for a
+one-hour nuget.org key (§11.33), push, create the GitHub release. No secret is stored, so nothing
+expires and nothing needs rotating.
 
 Three things to know before the next tag.
 
 **The tag is the version, and nuget.org has no delete** — only unlist. A prerelease tag is the cheap
 way to exercise a change to the release path, and the workflow infers prerelease status from the
-hyphen, so `v1.2.3-rc.1` marks itself correctly without anyone remembering to.
+hyphen: `v1.0.0-rc.1` marked itself correctly without anyone remembering to.
 
-**`release.yml`'s actions only run on a tag**, so CI never exercises them. They went from v4 to
-`checkout@v7`, `setup-dotnet@v6`, `setup-node@v7` and `upload-artifact@v7` on 2026-07-26 and have
-not run since — the next release is their first real test. This is the same blind spot §11.31
-identified when it moved packing onto every push, and it is **still open**.
+**The upgraded actions have now been exercised.** `release.yml`'s steps only run on a tag, so CI
+never touches them; they went to `checkout@v7`, `setup-dotnet@v6`, `setup-node@v7` and
+`upload-artifact@v7` on 2026-07-26 and had not run since. `v1.0.0-rc.1` was tagged partly to find
+out, and they work — as does the OIDC exchange, which was the step with no fallback. **The blind
+spot itself is not closed**: the next change to that file will again be unexercised until someone
+tags. `docs.yml` (§11.39) is the shape of the fix — build on pull requests, deploy only from `main`
+— and `release.yml` cannot copy it exactly, because it publishes somewhere with no delete. A
+prerelease tag is the same idea at the cost of a version number, and it is the habit to keep.
 
-`docs.yml` (§11.39) is the shape of the fix: it builds on pull requests and deploys only from
-`main`, so the half that can fail has already run before anything merges. `release.yml` cannot copy
-that exactly — it publishes to nuget.org, which has no delete — but a prerelease tag is the same
-idea at the cost of a version number.
+**Verify the published packages, not just the green job.** After `v1.0.0-rc.1` all nine were
+confirmed indexed on nuget.org and then installed into a throwaway console app that enqueued a job —
+about two minutes' work, and the only thing that actually proves a consumer can use what was
+shipped. `dotnet nuget push` reporting success means the bytes were accepted, not that they work.
 
 **The trust policy is pinned to the repository and to the file name `release.yml`.** Renaming or
 moving that file breaks publishing, which is the trade §11.33 made deliberately: authority belongs
@@ -68,8 +73,9 @@ to the thing that runs.
 
 ## The 1.0 tag is a decision, not a task
 
-Everything 1.0 scoped is built. What remains is deciding to **make the promise**, and nobody should
-make it by reflex because the issue list happens to be empty.
+**`v1.0.0-rc.1` is published** (2026-07-28) — a candidate, deliberately not the promise. Everything
+1.0 scoped is built and the release path is proven. What remains is deciding to **make the
+promise**, and nobody should make it by reflex because the issue list happens to be empty.
 
 Tagging `v1.0.0` says the storage contract and the v1 REST contract are stable. Three things worth
 weighing first:
@@ -84,8 +90,9 @@ weighing first:
   separate act of judgement from finishing the work, which is exactly why §11.31 refused to bump it
   when the pipeline landed.
 
-A `v1.0.0-rc.1` is the cheap way to exercise the release path again without making the promise —
-and, per the section above, that path has not run since its actions were upgraded.
+The rc is out, so the mechanical work is done and only the judgement is left. If the answer is yes,
+`v1.0.0` is one tag; if it is "not yet", `rc.2` costs nothing but a number, and the rc is what an
+evaluator can install in the meantime.
 
 What is *no longer* an argument against tagging: the three UIs now have an automated proof that they
 render and can act (§11.40). Before #131 they had none — and in that gap the Blazor UI shipped
@@ -118,6 +125,15 @@ benchmark numbers in #49: the measurement was wrong in a way the output looked f
 **A checker that has never failed is not a checker.** `scripts/check-docs-links.ps1` was verified by
 breaking a link on purpose and watching it exit 1. Worth the sixty seconds every time — the test
 that asserted a 200 on `{prefix}/ui` passed for months while the page was blank (§11.38).
+
+**Tests that drive the real worker share its scheduler — this has now bitten three times.** The
+newest: `An_instance_pinned_to_an_unregistered_version_fails_loudly` reads an instance and writes it
+back under optimistic concurrency, while its host runs a worker polling every 5ms that checkpoints
+the same instance and bumps `Revision`. Green on the pull request, green locally, red on Linux
+`main`. The fix was to stop running a worker the test never needed. **Diagnose these by reproducing
+them**: enabling the worker and inserting a 750ms delay between the read and the write reproduced
+CI's exact exception locally, and disabling the worker with the same delay passed — which pins the
+cause instead of correlating with it.
 
 **"Works on my machine" caused every real defect last session**, without exception:
 - `@angular/cli` was never declared as a dependency; `npx` had fetched it locally, so it built here
