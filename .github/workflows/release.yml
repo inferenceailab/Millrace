@@ -17,19 +17,19 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Source Link records the commit, so the shallow default would leave the packages pointing
           # at a commit the repository cannot resolve.
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
       # Needed to BUILD the UI packages, never to consume them. The smoke test below is what keeps
       # that distinction honest.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.x
 
@@ -70,7 +70,7 @@ jobs:
           -Packages "$PWD/artifacts"
           -Version ${{ steps.version.outputs.version }}
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: packages
           path: artifacts/*
@@ -80,7 +80,7 @@ jobs:
       # There is no stored secret to leak or rotate. Requested here rather than at the top of the job
       # because the hour starts now, and pack and the smoke test come first.
       - name: NuGet login (OIDC exchange)
-        uses: NuGet/login@v1
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         id: nuget-login
         with:
           user: inferenceailab

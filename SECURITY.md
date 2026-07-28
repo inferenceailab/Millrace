@@ -70,3 +70,5 @@ Worth knowing if you are assessing supply-chain risk:
 - **Workflows may only use an allowlist of actions** — GitHub-owned ones, plus `NuGet/login`. The
   verified-creator marketplace is deliberately *not* trusted wholesale, so a compromised third-party
   action cannot be introduced without a repository settings change.
+- **Every action is pinned to a full commit SHA**, so a moved version tag cannot change what runs in
+  a workflow that has publishing rights. Upgrades arrive as reviewable Dependabot pull requests.
