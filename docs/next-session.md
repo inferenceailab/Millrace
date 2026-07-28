@@ -23,10 +23,15 @@ Delete anything that stops being true.
   <https://inferenceailab.github.io/Millrace/>, guide by hand and API reference generated from the
   XML comments. GitHub Pages is enabled and the first deploy landed and was verified in a browser.
 
-`main` builds clean, the whole suite passes, and the docs deploy on every push.
+Then **[#126](https://github.com/inferenceailab/Millrace/issues/126)** ([#131](https://github.com/inferenceailab/Millrace/pull/131),
+§11.40) closed the gap §11.38 named: a `browser` CI job now serves each of the three UIs from a real
+Kestrel host and drives it with Chromium, so a UI that renders nothing fails the build instead of
+shipping.
 
-**So the only open question left is whether to tag 1.0**, and that is a promise, not a task — see
-below. The only open story is [#126](https://github.com/inferenceailab/Millrace/issues/126).
+`main` builds clean, the whole suite passes, the docs deploy on every push, and **no non-epic issue
+is open**.
+
+**So the only thing left is whether to tag 1.0**, and that is a promise, not a task — see below.
 
 ## Nothing is blocking on a person
 
@@ -82,9 +87,9 @@ weighing first:
 A `v1.0.0-rc.1` is the cheap way to exercise the release path again without making the promise —
 and, per the section above, that path has not run since its actions were upgraded.
 
-**[#126](https://github.com/inferenceailab/Millrace/issues/126)** is the only open story: execute
-the UI bundles in a real browser before they ship. It is worth doing before 1.0 rather than after,
-because it is the check whose absence §11.38 is entirely about.
+What is *no longer* an argument against tagging: the three UIs now have an automated proof that they
+render and can act (§11.40). Before #131 they had none — and in that gap the Blazor UI shipped
+rendering nothing at all, while a server defect left the mount root blank for **all three**.
 
 ## Things that will bite you
 
@@ -99,8 +104,9 @@ rendering at 69 pixels square on top of the brand text. The first fix (explicit 
 the SVG) did nothing, because the template injects it client-side as `<img id="logo">` and sizes it
 from that id, so a class selector loses on specificity. One screenshot found both facts.
 
-**Open what you built.** [#126](https://github.com/inferenceailab/Millrace/issues/126) exists to
-make that a check rather than a habit.
+**Open what you built.** [#126](https://github.com/inferenceailab/Millrace/issues/126) has since made
+that a check rather than a habit — but only for the dashboard UIs. The docs site has no equivalent,
+which is why its logo bug was found by hand.
 
 **Measure the exit code of the thing you are measuring.** Checking whether docfx's
 `--warningsAsErrors` actually fails a build, the first attempt read the exit code of `tail` through
@@ -194,6 +200,12 @@ Newly true, and worth the same scrutiny in a few months:
   something a reader can check: the medians agree to within 0.4% while individual runs vary by 15%.
   That pair is also the only honest answer to "is this difference real?" — under about 10%, it is
   not.
+
+**The browser suite** (§11.40) is the newest, and the one with the clearest job: it is the only check
+in the repository that executes a UI rather than reading it. Two things to watch. It asserts on what
+the three UIs *share* — hash routes, button labels, a Queue column — so the question in a few months
+is whether that shared surface held or whether the tests quietly became React-shaped. And it covers
+Chromium only, with no visual regression, so "it renders" still does not mean "it looks right".
 
 And from the docs site (§11.39), too new to have earned anything but worth watching:
 
