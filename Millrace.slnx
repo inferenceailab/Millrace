@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Millrace.Storage.PostgreSql/Millrace.Storage.PostgreSql.csproj" />
     <Project Path="src/Millrace.Storage.SqlServer/Millrace.Storage.SqlServer.csproj" />
+    <Project Path="src/Millrace.Storage.Sqlite/Millrace.Storage.Sqlite.csproj" />
     <Project Path="src/Millrace.Storage.Verification/Millrace.Storage.Verification.csproj" />
     <Project Path="src/Millrace.Dashboard.Ui.React/Millrace.Dashboard.Ui.React.csproj" />
   <Project Path="src/Millrace.Dashboard.Ui.Angular/Millrace.Dashboard.Ui.Angular.csproj" />
@@ -19,6 +20,7 @@
   <Folder Name="/test/">
     <Project Path="test/Millrace.Storage.PostgreSql.Tests/Millrace.Storage.PostgreSql.Tests.csproj" />
     <Project Path="test/Millrace.Storage.SqlServer.Tests/Millrace.Storage.SqlServer.Tests.csproj" />
+    <Project Path="test/Millrace.Storage.Sqlite.Tests/Millrace.Storage.Sqlite.Tests.csproj" />
     <Project Path="test/Millrace.Dashboard.Tests/Millrace.Dashboard.Tests.csproj" />
     <Project Path="test/Millrace.Dashboard.BrowserTests/Millrace.Dashboard.BrowserTests.csproj" />
     <Project Path="test/Millrace.Tests/Millrace.Tests.csproj" />
