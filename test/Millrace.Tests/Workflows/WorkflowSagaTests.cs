@@ -205,8 +205,9 @@ public sealed class WorkflowSagaTests
 
         await Eventually.ObservedAsync(
             async () => await storage.GetInstanceAsync(id, CancellationToken.None),
-            i => { time.Advance(TimeSpan.FromMilliseconds(200)); return i?.State == WorkflowInstanceState.Suspended; },
-            "the failed compensation to suspend the instance");
+            i => i?.State == WorkflowInstanceState.Suspended,
+            "the failed compensation to suspend the instance",
+            time);
 
         return (client, id, storage);
     }
@@ -215,8 +216,9 @@ public sealed class WorkflowSagaTests
         IWorkflowStorage storage, FakeTimeProvider time, WorkflowInstanceId id, WorkflowInstanceState state)
         => Eventually.ObservedAsync(
             async () => await storage.GetInstanceAsync(id, CancellationToken.None),
-            i => { time.Advance(TimeSpan.FromMilliseconds(200)); return i?.State == state; },
-            $"the instance to reach {state}");
+            i => i?.State == state,
+            $"the instance to reach {state}",
+            time);
 
     [Fact]
     public async Task Abandoning_a_failed_compensation_fails_the_instance_and_undoes_no_more()

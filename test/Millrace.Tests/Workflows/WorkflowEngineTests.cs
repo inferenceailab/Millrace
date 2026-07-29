@@ -296,17 +296,9 @@ public sealed class WorkflowEngineTests
         var monitoring = host.Services.GetRequiredService<IMonitoringStorage>();
         await Eventually.ObservedAsync(
             async () => await monitoring.QueryJobsAsync(new JobQuery(), CancellationToken.None),
-            page =>
-            {
-                // The clock must move while waiting. The worker's poll loop delays through the
-                // injected TimeProvider, so on a fake clock that nothing advances it sleeps forever
-                // once its first poll comes up empty — and the job being waited for never runs.
-                // This passed locally on timing luck: the enqueue landed inside the worker's first
-                // burst of polls. A slower machine loses that race, which is what CI does.
-                time.Advance(TimeSpan.FromMilliseconds(200));
-                return page.Items.Any(j => j.Failures > 0);
-            },
-            "the failing activity to run and record a failure");
+            page => page.Items.Any(j => j.Failures > 0),
+            "the failing activity to run and record a failure",
+            time);
 
         var instance = await storage.GetInstanceAsync(id, CancellationToken.None);
         var data = await DataAsync(host, id);
@@ -334,8 +326,12 @@ public sealed class WorkflowEngineTests
         // always enough for it to run, which is what made this flaky (#87). Waiting is safe because
         // the step *after* the delay cannot run until this test advances the fake clock, so once
         // "first" is observed the assertion below is racing nothing.
+        //
+        // Eventually advances that clock as it polls, and the two-hour Delay is what keeps the
+        // assertion below honest: the poll budget tops out around 80 fake seconds, so the flow
+        // cannot slip past the delay while we are waiting to catch it before it.
         var midway = await Eventually.ObservedAsync(
-            () => DataAsync(host, id), d => d.Steps.Count > 0, "the flow to reach the delay");
+            () => DataAsync(host, id), d => d.Steps.Count > 0, "the flow to reach the delay", time);
 
         Assert.Equal(["first"], midway.Steps);
 
