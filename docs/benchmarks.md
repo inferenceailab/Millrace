@@ -17,58 +17,64 @@ there was anything to measure.
 
 ```
 cd bench && docker compose up -d
-dotnet run -c Release --project Millrace.Benchmarks -- --all
+dotnet run -c Release --project Millrace.Benchmarks -- --all --repeats 9 --json raw.json
 ```
 
-About twenty minutes at the published defaults. `--help` lists the knobs;
-[`bench/README.md`](../bench/README.md) covers running one cell at a time while iterating.
+**About 34 minutes**, which is what the tables below were produced with. Dropping `--repeats 9` uses
+the harness default of three and takes roughly a third as long — right for iterating, not for
+publishing. `--help` lists the knobs; [`bench/README.md`](../bench/README.md) covers running one cell
+at a time.
+
+Worth one sanity run first — `--scenario drain --system millrace --jobs 500 --repeats 1` finishes in
+under a minute. The harness compiles in CI but never executes there, so it is the kind of code that
+rots quietly, and a small run is the cheapest way to find out before committing half an hour.
 
 ## The numbers
 
-Median of 9 runs per cell. Millrace 0.1.0-alpha, Hangfire 1.8.24 with Hangfire.PostgreSql 1.21.1,
-WorkflowCore 3.18.0.
+Median of 9 runs per cell. Millrace 1.1.0, Hangfire 1.8.24 with Hangfire.PostgreSql 1.21.1,
+WorkflowCore 3.18.0. Measured 2026-07-30.
 
 ```
 Machine: Microsoft Windows 10.0.26200 · X64 · 28 logical cores
 Runtime: .NET 10.0.9 · server GC · PostgreSQL 17.9
-Settings: workers=20, producers=8, jobs=10000, instances=2000, rate=200/s for 15s
+Settings: workers=20, producers=8, jobs=10000, instances=2000, rate=200/s for 15s, median of 9
 ```
 
 ### Enqueue throughput — client writes, nothing consuming
 
 | System | Tuning | Throughput | spread |
 |---|---|--:|--:|
-| **Millrace** | matched | **1,474 jobs/s** | 7% |
-| Hangfire | matched | 828 jobs/s | 5% |
+| **Millrace** | matched | **1,763 jobs/s** | 21% |
+| Hangfire | matched | 948 jobs/s | 16% |
 
 ### Drain throughput — a standing backlog, workers started
 
 | System | Tuning | Throughput | Startup | spread |
 |---|---|--:|--:|--:|
-| **Millrace** | matched | **1,692 jobs/s** | 11 ms | 15% |
-| Hangfire | matched | 503 jobs/s | 24 ms | 7% |
-| **Millrace** | default | **1,686 jobs/s** | 11 ms | 12% |
-| Hangfire | default | 529 jobs/s | 22 ms | 2% |
+| **Millrace** | matched | **1,992 jobs/s** | 9.1 ms | 15% |
+| Hangfire | matched | 616 jobs/s | 19 ms | 2% |
+| **Millrace** | default | **1,991 jobs/s** | 9.1 ms | 7% |
+| Hangfire | default | 640 jobs/s | 18 ms | 2% |
 
 ### Enqueue-to-execute latency — steady arrivals at 200/s, unsaturated
 
 | System | Tuning | p50 | p95 | p99 | max | achieved rate |
 |---|---|--:|--:|--:|--:|--:|
-| **Millrace** | matched | **6.9 ms** | 11 ms | 13 ms | 36 ms | 200/s |
-| Hangfire | matched | 34 ms | 47 ms | 54 ms | 100 ms | 199/s |
-| **Millrace** | default | **7.2 ms** | 13 ms | 21 ms | 40 ms | 200/s |
-| Hangfire | default | 18 ms | 25 ms | 32 ms | 40 ms | 200/s |
+| **Millrace** | matched | **6.8 ms** | 11 ms | 13 ms | 32 ms | 200/s |
+| Hangfire | matched | 22 ms | 31 ms | 38 ms | 51 ms | 200/s |
+| **Millrace** | default | **6.7 ms** | 11 ms | 13 ms | 33 ms | 200/s |
+| Hangfire | default | 13 ms | 18 ms | 22 ms | 37 ms | 200/s |
 
 ### Workflow throughput — three-step instances, drained from a backlog
 
 | System | Tuning | Throughput | Startup | spread |
 |---|---|--:|--:|--:|
-| **Millrace** | matched | **352 inst/s** | 4,435 ms | 18% |
-| WorkflowCore | matched | 67 inst/s | 11,014 ms | 11% |
+| **Millrace** | matched | **450 inst/s** | 3,466 ms | 4% |
+| WorkflowCore | matched | 70 inst/s | 10,517 ms | 3% |
 
 ### What to take from it
 
-Millrace is **1.8× on enqueue**, **3.2–3.4× on drain**, **2.5–5× on median latency**, and **5.3× on
+Millrace is **1.9× on enqueue**, **3.1–3.2× on drain**, **1.9–3.2× on median latency**, and **6.4× on
 workflow instances**. The gaps are large enough to survive the caveats below; the exact multiples
 are not, and nobody should quote them to two significant figures.
 
@@ -78,15 +84,55 @@ at a time. At these rates the round trip *is* the cost, so batching it is most o
 
 **Two results cut against the setup rather than for it, and are reported because they are true:**
 
-- **Hangfire is faster on its own defaults than on the tuning chosen to be fair to it** — 18 ms
-  against 34 ms at p50. Enabling `EnableLongPolling`, the closest analogue to the LISTEN/NOTIFY wake
+- **Hangfire is still faster on its own defaults than on the tuning chosen to be fair to it** — 13 ms
+  against 22 ms at p50. Enabling `EnableLongPolling`, the closest analogue to the LISTEN/NOTIFY wake
   Millrace uses, made it slower rather than faster. If the *matched* row were dropped, Hangfire
-  would look worse than it is.
-- **Millrace's workflow startup is 4.4 s**, and its 18% spread is the widest in the table. An
-  instance is three checkpointed steps and the pipeline has to fill before any instance completes,
-  so a 2,000-instance backlog spends its first seconds producing nothing. WorkflowCore's is worse
-  (11 s), but "less bad than WorkflowCore" is not a defence of a cold-start figure that will be
-  visible to anyone starting a burst of workflows.
+  would look worse than it is. This survived a re-measurement on a quieter machine, which is more
+  than the original run could claim for it.
+- **Millrace's workflow startup is 3.5 s.** An instance is three checkpointed steps and the pipeline
+  has to fill before any instance completes, so a 2,000-instance backlog spends its first seconds
+  producing nothing. WorkflowCore's is worse (10.5 s), but "less bad than WorkflowCore" is not a
+  defence of a cold-start figure that will be visible to anyone starting a burst of workflows.
+
+### Compared with the previous run
+
+This is the first re-measurement, and it is the more useful half of the exercise: it says which parts
+of the claim above are properties of Millrace and which were properties of a developer workstation.
+
+**Every absolute number improved, on every system.** The comparands' versions did not change —
+Hangfire 1.8.24 and WorkflowCore 3.18.0 in both runs — so their gains are not code:
+
+| | previous | this run | change |
+|---|--:|--:|--:|
+| Millrace enqueue, *matched* | 1,474/s | 1,763/s | +20% |
+| Hangfire enqueue, *matched* | 828/s | 948/s | +14% |
+| Millrace drain, *matched* | 1,692/s | 1,992/s | +18% |
+| Hangfire drain, *matched* | 503/s | 616/s | +22% |
+| Millrace workflow | 352/s | 450/s | +28% |
+| WorkflowCore workflow | 67/s | 70/s | +4% |
+
+The previous session found "some unidentified process retrying a connection to the benchmark's port
+every two seconds for the entire session". A uniform lift across three libraries, two of them
+byte-identical, is what that looks like when it goes away. **Read none of the absolute gains as
+Millrace getting faster.**
+
+**The ratios are what held.** On the job scenarios they moved less than the harness's own noise floor:
+enqueue 1.78× → 1.86×, drain *matched* 3.36× → 3.23×, drain *default* 3.19× → 3.11×. All under 10%,
+which by the rule below means nothing happened.
+
+**Two ratios did move, and both are worth naming rather than smoothing over.**
+
+- **Latency narrowed, against Millrace.** The published claim was 2.5–5× on median latency; it is now
+  1.9–3.2×. Millrace was flat (6.9 → 6.8 ms *matched*, 7.2 → 6.7 ms *default*) while Hangfire improved
+  sharply (34 → 22 ms, 18 → 13 ms). The reading: Millrace's ~7 ms looks floor-bound — it is a
+  notification round trip, and a quieter machine cannot make it shorter — whereas Hangfire's was
+  polling-bound and noise-sensitive. **The original latency multiple was inflated by the noise, and
+  the honest figure is the smaller one.**
+- **Workflow widened, for Millrace** — 5.3× → 6.4×. Most of that is startup rather than steady state:
+  Millrace's fell 4,435 → 3,466 ms while WorkflowCore's barely moved, and WorkflowCore's run is
+  startup-dominated (10.5 s of roughly 29). Throughput here includes spin-up by design, so a startup
+  improvement shows up as a throughput ratio. Do not read 6.4× as the engine executing steps 6.4×
+  faster.
 
 
 
@@ -140,8 +186,9 @@ The rules, stated so they can be argued with rather than taken on trust:
    defaults in every row of every table. Hangfire and WorkflowCore are the ones adjusted.
 5. **Setup is never inside the measured window.** Schema DDL, EF Core migrations and JIT are all
    paid in a discarded warmup.
-6. **Median of three runs, with every repeat kept** in `--json` output and the spread published
-   beside the median.
+6. **Median of nine runs, with every repeat kept** in `--json` output and the spread published
+   beside the median. Nine is what the published tables use (`--repeats 9`); the harness *default* is
+   three, which is for iterating rather than publishing.
 
 ### Two tunings, both published
 
@@ -190,28 +237,53 @@ The **spread** column is `(max − min) ÷ median` across the nine repeats. It i
 crudest measure available: one slow run moves it a lot, which is what makes it useful as a warning
 and useless as a summary.
 
-**The machine was not isolated, and the numbers above were published anyway.** It was a developer
-workstation with unrelated containers running throughout — and, discovered while investigating, some
-unidentified process retrying a connection to the benchmark's port every two seconds for the entire
-session. Several cells therefore carry a 12–18% spread, driven by single slow repeats rather than by
-a distribution that is genuinely that wide.
+**The machine was not isolated, and the numbers above were published anyway.** It is a developer
+workstation with unrelated containers running throughout, and Docker was cold-started for this run.
+The previous session additionally found some unidentified process retrying a connection to the
+benchmark's port every two seconds throughout; that is gone, which is most of why every absolute
+number rose.
 
 The reason for publishing regardless is the repeatability control. Millrace's two drain rows are the
 same configuration measured twice, nine times each, with nothing changed between them:
 
 | | median | spread |
 |---|--:|--:|
-| Millrace drain, *matched* | 1,692 jobs/s | 15% |
-| Millrace drain, *default* | 1,686 jobs/s | 12% |
+| Millrace drain, *matched* | 1,992 jobs/s | 15% |
+| Millrace drain, *default* | 1,991 jobs/s | 7% |
 
-**The medians agree to within 0.4% while individual runs vary by 15%.** That is the shape of noise
+**The medians agree to within 0.05% while individual runs vary by 15%.** That is the shape of noise
 that a median absorbs and a mean would not, and it is why the medians are quoted and every repeat is
 kept in `--json`. It also sets the floor for reading the rest of the table: a difference under about
-10% between two rows here means nothing, which is why the results above are described as
-"3.2–3.4×" rather than as a number.
+10% between two rows here means nothing, which is why the results above are described as "3.1–3.2×"
+rather than as a number.
 
-Reproducing this on a quiet machine should tighten the spreads and should not move the medians much.
-If it moves a median substantially, that is worth an issue.
+The previous run's control agreed to 0.4%; this one to 0.05%. Two runs is not a trend, but it is at
+least not evidence that the control is luck.
+
+### The widest spread has a cause, and it is the harness
+
+Millrace's enqueue spread is 21%, the widest cell in the table. It is not a wide distribution — it is
+the first two repeats being cold:
+
+```
+1,541  1,439  1,777  1,739  1,789  1,756  1,763  1,807  1,792
+```
+
+Runs 3–9 sit in a 4% band; runs 1 and 2 are the two lowest of the nine. The warmup exercises the
+*drain* scenario, which seeds a backlog and therefore only partly pays for the enqueue path — so the
+enqueue scenario is still warming during its own first repeats.
+
+**Two things follow, and the second is the point.** It is a real gap in the warmup, worth closing
+before the next publication. And it barely moved the published figure: the median of runs 3–9 alone is
+1,777/s against the published 1,763/s, a 0.8% difference across a 21% spread. That is the median doing
+exactly the job §11.37 claims for it, demonstrated on an accident rather than asserted.
+
+Hangfire's enqueue does not show the pattern — its low repeat is run 5, not runs 1–2 — so this is
+specific to Millrace's write path rather than to the harness's ordering in general.
+
+Reproducing this on a genuinely quiet machine should tighten the spreads further and should not move
+the ratios. If it moves a *ratio* substantially, that is worth an issue; a moved absolute is worth a
+shrug, as this run demonstrates.
 
 ## If a run stalls
 
@@ -225,3 +297,6 @@ a worker pool that has not finished shutting down is the most plausible cause, s
 `DROP DATABASE ... WITH (FORCE)` terminates whatever is still connected. It is recorded here rather
 than omitted: the published tables have no stalls in them, and that is a statement about these runs
 rather than a guarantee.
+
+The 2026-07-30 re-measurement had **zero stalls across 108 measured runs**, which is the first
+independent evidence that the settling fixed it rather than that the stall happened to not recur.
