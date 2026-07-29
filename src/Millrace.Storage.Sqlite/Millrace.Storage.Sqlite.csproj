@@ -3,10 +3,12 @@
   <PropertyGroup>
     <Description>SQLite storage provider for Millrace: a durable, serverless queue for single-node deployments, local development and tests. Claims serialise through BEGIN IMMEDIATE rather than SKIP LOCKED. Verified by the Millrace.Storage.Verification conformance kit.</Description>
     <!--
-      Not published yet (#151, slice 4 flips this). §11.14 makes IMonitoringStorage part of the bar
-      for a supported provider and this one does not implement it yet, so releasing it now would
-      promise something it does not do — permanently, because nuget.org has no delete. Leaving it
-      unpackable means an unplanned tag between slices cannot ship a half-provider by accident.
+      Not published yet (#151, the packaging slice flips this). The §11.14 bar is met as of slice 2 —
+      jobs, workflows and monitoring all pass the conformance kit — so what is left is the part a
+      consumer meets first: a README section, a docs-site page, and a line in
+      scripts/smoke-test-packages.ps1 proving the package works without Node. Publishing ahead of
+      those would ship a provider nothing documents, permanently, because nuget.org has no delete.
+      Keeping it unpackable also means an unplanned tag cannot do that by accident.
     -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
