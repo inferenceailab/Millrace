@@ -273,7 +273,8 @@ public sealed class WorkflowSignalTests
         await Eventually.ObservedAsync(
             async () => await monitoring.QueryJobsAsync(new JobQuery(), CancellationToken.None),
             page => page.Items.All(j => j.State.IsTerminal()),
-            "the timeout job to run and settle");
+            "the timeout job to run and settle",
+            time);
 
         var data = await client.GetDataAsync<Approval>(id);
         var instance = await host.Services.GetRequiredService<IWorkflowStorage>()
