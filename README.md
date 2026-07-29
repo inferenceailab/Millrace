@@ -3,7 +3,9 @@
 > **Status: 1.0.** Jobs, workflows, sagas, both SQL providers, the dashboard and its three official
 > UIs are built, tested and published. **The storage contract and the v1 REST contract are now
 > stable**: they will not break within 1.x. That promise is the whole meaning of this version
-> number, which stayed at `0.1.0-alpha` until it could be made honestly. Start with the
+> number, which stayed at `0.1.0-alpha` until it could be made honestly. A **SQLite provider** has
+> since landed on `main` and ships with the next release — it is listed below because it is what the
+> package table will describe then. Start with the
 > [documentation](https://inferenceailab.github.io/Millrace/), or with
 > [ARCHITECTURE.md](ARCHITECTURE.md) if you would rather read the design.
 
@@ -14,7 +16,7 @@ directed, sustained flow that does work.
 
 - **Durable jobs** — persistent queues, retries with backoff, cron, delayed jobs, continuations. `jobs.EnqueueAsync<IEmailSender>(s => s.SendAsync(orderId))`.
 - **Workflows** — code-first fluent graphs with parallel branches, sagas + compensation, strongly typed signals, durable timers. Every activity runs as a durable job and inherits retries, distribution, and observability.
-- **Storage as a plugin** — the core has zero database dependencies; pick a provider package (PostgreSQL first) or write your own and verify it with the shipped conformance kit.
+- **Storage as a plugin** — the core has zero database dependencies; pick a provider package (PostgreSQL, SQL Server or SQLite) or write your own and verify it with the shipped conformance kit.
 - **Ops dashboard** — mounted as middleware over a versioned REST + OpenAPI contract, with official React, Angular, and Blazor UIs.
 - **Modern .NET only, zero framework lock-in** — `net10.0`, System.Text.Json, TimeProvider, OpenTelemetry-native. No application-framework dependencies (no ABP, no MassTransit): just the BCL and `Microsoft.Extensions.*`, with multi-tenancy and authorization hooks built in natively. MIT licensed.
 
@@ -64,6 +66,7 @@ app.MapMillraceDashboard("/millrace");
 | Package | For |
 |---|---|
 | `Millrace` | The library. Jobs, workflows, the in-memory provider. No database dependencies. |
+| `Millrace.Storage.Sqlite` | SQLite provider. Durable with no server to run; claims serialise instead of skipping locks, so it suits one node rather than many. |
 | `Millrace.Storage.PostgreSql` | PostgreSQL provider — `SKIP LOCKED` claims and `LISTEN/NOTIFY` wakeups. |
 | `Millrace.Storage.SqlServer` | SQL Server provider. No push channel, so workers poll. |
 | `Millrace.Dashboard` | The REST + OpenAPI contract and middleware. No UI of its own. |

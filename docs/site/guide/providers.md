@@ -1,6 +1,6 @@
 ---
 title: Storage providers
-description: Choosing and configuring a Millrace storage provider — in-memory, PostgreSQL, SQL Server.
+description: Choosing and configuring a Millrace storage provider — in-memory, SQLite, PostgreSQL, SQL Server.
 ---
 
 # Storage providers
@@ -16,10 +16,11 @@ If you want to implement the contract yourself, see [Writing a provider](writing
 | Provider | Package | Use it for |
 |---|---|---|
 | In-memory | `Millrace` (built in) | Development, samples, tests. Not durable. |
-| PostgreSQL | `Millrace.Storage.PostgreSql` | Production. The best queue semantics of the three. |
+| SQLite | `Millrace.Storage.Sqlite` | Durability without a server: single-node deployments, development, tests that outlive a restart. |
+| PostgreSQL | `Millrace.Storage.PostgreSql` | Production. The best queue semantics of the four. |
 | SQL Server | `Millrace.Storage.SqlServer` | Production, where SQL Server is what you already run. |
 
-All three pass the same conformance suite. The differences below are about performance and
+All four pass the same conformance suite. The differences below are about performance and
 operational shape, not correctness.
 
 ## In-memory
@@ -33,6 +34,65 @@ SQL providers do — and it holds everything in process memory, so a restart los
 
 Right for: development, the sample, unit and integration tests (though
 [`Millrace.Testing`](testing.md) is better for those). Wrong for anything you care about.
+
+## SQLite
+
+```bash
+dotnet add package Millrace.Storage.Sqlite
+```
+
+```csharp
+builder.Services.AddMillrace(millrace => millrace.UseSqliteStorage("Data Source=millrace.db"));
+```
+
+The gap between in-memory and running a database server. Jobs survive a restart, there is nothing to
+deploy or operate, and the whole store is one file you can copy, back up or delete.
+
+**The trade is concurrency.** SQLite has one writer at a time and no row locks, so claims cannot step
+over each other the way `SKIP LOCKED` and `READPAST` do — instead every write path takes the writer
+lock up front and the second claimer *waits*. That is still exclusive, which is all the contract asks,
+and it is why the SQLite provider passes the same suite. But throughput does not improve by adding
+workers the way it does on PostgreSQL, and past a certain `MaxParallelism` they simply queue.
+
+Right for: single-node deployments, desktop and edge applications, CI, and development where you want
+a restart to keep its jobs. Wrong for: several application nodes sharing one store, or any workload
+where write contention is the bottleneck. That is the point to move to PostgreSQL — the storage
+contract is the same, so it is a registration change.
+
+### Options
+
+```csharp
+millrace.UseSqliteStorage("Data Source=millrace.db", options =>
+{
+    options.AutoCreateSchema = true;                    // default
+    options.UseWriteAheadLog = true;                    // default
+    options.BusyTimeout = TimeSpan.FromSeconds(30);     // default
+});
+```
+
+`UseWriteAheadLog` lets reads run alongside the single writer, which is what keeps the dashboard from
+queueing behind a claim. Turn it off only where WAL cannot work — it needs shared memory, so some
+network file systems refuse it.
+
+`BusyTimeout` is how long a connection waits for the writer lock before failing. It is a contention
+budget rather than a statement timeout: every write here is a short transaction, so waiting is almost
+always better than surfacing an error to a worker that would just retry. If claims start timing out,
+that is the signal to move to a server-backed provider rather than to raise it further.
+
+### In-memory databases
+
+`Data Source=:memory:` works, and the provider holds one connection open for its lifetime so the
+database survives between operations. It is durable in the sense that nothing is lost while the
+process lives, and lost entirely when it exits — so it is a curiosity next to
+[`Millrace.Testing`](testing.md), which is what you actually want for tests.
+
+### Wakeups are in-process
+
+The provider advertises the notification capability, but the channel is in-process: SQLite has no
+cross-process notification mechanism. One application sees pushed wakeups; a second process sharing
+the same file falls back to its poll interval. That is a **latency** difference and nothing more —
+notifications are best-effort by contract, and a worker's liveness rests on the poll ceiling rather
+than on any signal arriving.
 
 ## PostgreSQL
 
@@ -100,9 +160,9 @@ millrace.UseSqlServerStorage(connectionString, options =>
 
 ## Schema management
 
-Both SQL providers create and upgrade their schema on startup when `AutoCreateSchema` is left on.
-Upgrades are **idempotent** — safe to run from every node in a deployment simultaneously, and safe to
-run against a database that is already current.
+All three durable providers create and upgrade their schema on startup when `AutoCreateSchema` is
+left on. Upgrades are **idempotent** — safe to run from every node in a deployment simultaneously, and
+safe to run against a database that is already current.
 
 Set `AutoCreateSchema = false` where your organisation requires migrations to be applied by a
 separate process with elevated rights. You are then responsible for the schema being present and
@@ -139,6 +199,9 @@ None of this is prose the provider author is trusted to have read. It is an exec
 
 ## Roadmap
 
-SQLite is the next reference provider, aimed at development and small single-node deployments.
+Four providers ship, and the fourth was the interesting one: SQLite has no `SKIP LOCKED`, one writer
+and no server, so it was the cheapest test of whether the storage contract frozen in 1.0 could still
+be implemented by something shaped differently. It could, unchanged.
+
 Community providers — Mongo, Redis, others — became viable the day the conformance kit shipped: the
 bar is public, executable, and the same one the official providers clear.
