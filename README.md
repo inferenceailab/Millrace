@@ -1,11 +1,10 @@
 # Millrace
 
-> **Status: 1.0.** Jobs, workflows, sagas, both SQL providers, the dashboard and its three official
-> UIs are built, tested and published. **The storage contract and the v1 REST contract are now
-> stable**: they will not break within 1.x. That promise is the whole meaning of this version
-> number, which stayed at `0.1.0-alpha` until it could be made honestly. A **SQLite provider** has
-> since landed on `main` and ships with the next release — it is listed below because it is what the
-> package table will describe then. Start with the
+> **Status: 1.1.** Jobs, workflows, sagas, three durable storage providers — PostgreSQL, SQL Server
+> and SQLite — the dashboard and its three official UIs are built, tested and published across ten
+> packages. **The storage contract and the v1 REST contract are stable**: they will not break within
+> 1.x. That promise is the whole meaning of the 1.0 that preceded this, a number which stayed at
+> `0.1.0-alpha` until it could be made honestly. Start with the
 > [documentation](https://inferenceailab.github.io/Millrace/), or with
 > [ARCHITECTURE.md](ARCHITECTURE.md) if you would rather read the design.
 
@@ -30,6 +29,7 @@ directed, sustained flow that does work.
 | 0.4 | Sagas, compensation, versioning, management actions | **done** |
 | 0.5 | OpenTelemetry, SQL Server provider, batch enqueue, `Millrace.Testing`, Angular UI | **done** |
 | 1.0 | Hardening, Blazor UI, docs site, benchmarks, stable contracts | **done** |
+| 1.1 | SQLite provider — durable with no server, and the first test of whether the frozen storage contract suits something unlike the providers it was designed against | **done** |
 
 Full documentation — guides and the generated API reference — is at
 **<https://inferenceailab.github.io/Millrace/>**; its source is [docs/site](docs/site).
