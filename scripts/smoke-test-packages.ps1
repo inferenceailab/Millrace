@@ -12,6 +12,12 @@
     project built here has no Node toolchain involvement at all, and it serves the dashboard UI out
     of the package's embedded bundle.
 
+    Since the SQLite provider shipped, this is also the only check anywhere that runs a *durable*
+    provider out of a package. PostgreSQL and SQL Server need a server, so their conformance suites
+    can only run against the source tree; SQLite needs a file, which a throwaway console app has. It
+    catches a class the others cannot: a native dependency (SQLitePCLRaw carries one) that the
+    solution resolved by project reference and the package forgot to declare.
+
 .PARAMETER Packages
     Folder holding the .nupkg files, as produced by `dotnet pack -o`.
 #>
@@ -45,7 +51,12 @@ try {
     dotnet new console --framework net10.0 --name Consumer | Out-Null
     Push-Location (Join-Path $work 'Consumer')
 
-    foreach ($package in @('Millrace', 'Millrace.Dashboard', 'Millrace.Dashboard.Ui.React', 'Millrace.Testing')) {
+    foreach ($package in @(
+            'Millrace',
+            'Millrace.Dashboard',
+            'Millrace.Dashboard.Ui.React',
+            'Millrace.Storage.Sqlite',
+            'Millrace.Testing')) {
         dotnet add package $package --version $Version --no-restore | Out-Null
     }
 
@@ -54,6 +65,8 @@ try {
     @'
 using Microsoft.Extensions.DependencyInjection;
 using Millrace;
+using Millrace.Storage;
+using Millrace.Storage.Sqlite;
 using Millrace.Testing;
 
 var ran = false;
@@ -83,7 +96,54 @@ if (ui.Count == 0)
     return 1;
 }
 
-Console.WriteLine($"OK: job ran, and the UI package carries {ui.Count} embedded assets.");
+// The only place a *durable* provider runs out of a package. The two SQL providers need a server, so
+// their suites can only ever run against the source tree; SQLite needs a file, which this app has.
+// Two things are being checked that no compile-time check can see: that SQLitePCLRaw's native
+// library came along with the package, and that a job survives the provider being closed and
+// reopened — which is the entire difference between this package and the in-memory storage above.
+// Inside the project directory, which the script deletes wholesale — no cleanup to get wrong here.
+const string connectionString = "Data Source=millrace-smoke.db";
+
+JobId enqueued;
+await using (var storage = new SqliteStorage(connectionString))
+{
+    var ids = await storage.EnqueueAsync(
+        [
+            new JobRecord
+            {
+                Id = JobId.New(TimeProvider.System),
+                Queue = "default",
+                State = JobState.Enqueued,
+                Retry = Retry.None,
+                CreatedAt = TimeProvider.System.GetUtcNow(),
+                Invocation = new JobInvocation
+                {
+                    TypeName = "Smoke.IWork, Smoke",
+                    MethodName = "RunAsync",
+                    ParameterTypes = [],
+                    ArgumentsJson = [],
+                },
+            },
+        ],
+        CancellationToken.None);
+    enqueued = ids[0];
+}
+
+await using (var storage = new SqliteStorage(connectionString))
+{
+    var claimed = await storage.ClaimAsync(
+        new ClaimRequest("smoke", ["default"], 1, TimeSpan.FromMinutes(1)), CancellationToken.None);
+
+    if (claimed.Count != 1 || claimed[0].Id != enqueued)
+    {
+        Console.Error.WriteLine($"FAIL: SQLite lost the job across a reopen (claimed {claimed.Count}).");
+        return 1;
+    }
+}
+
+Console.WriteLine(
+    $"OK: job ran, the UI package carries {ui.Count} embedded assets, "
+    + "and SQLite kept a job across a reopen.");
 return 0;
 
 public interface IWork
