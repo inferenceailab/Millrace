@@ -37,11 +37,7 @@ internal sealed class SqliteHarness : IStorageHarness
 
     public IWorkflowStorage Workflows => _storage;
 
-    public Millrace.Storage.Monitoring.IMonitoringStorage Monitoring
-        => throw new NotSupportedException(
-            "The SQLite provider does not implement IMonitoringStorage yet (#151, slice 3). "
-            + "MonitoringConformanceSuite is deliberately not wired up until it does, rather than "
-            + "being registered and skipped.");
+    public Millrace.Storage.Monitoring.IMonitoringStorage Monitoring => _storage;
 
     public static async ValueTask<IStorageHarness> CreateAsync(TimeProvider time)
     {
@@ -81,6 +77,12 @@ public sealed class SqliteJobStorageConformanceTests : JobStorageConformanceSuit
 }
 
 public sealed class SqliteWorkflowStorageConformanceTests : WorkflowStorageConformanceSuite
+{
+    protected override ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time)
+        => SqliteHarness.CreateAsync(time);
+}
+
+public sealed class SqliteMonitoringConformanceTests : MonitoringConformanceSuite
 {
     protected override ValueTask<IStorageHarness> CreateHarnessAsync(TimeProvider time)
         => SqliteHarness.CreateAsync(time);

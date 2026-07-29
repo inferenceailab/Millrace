@@ -34,10 +34,8 @@ public static class MillraceBuilderSqliteExtensions
             connectionString,
             sp.GetRequiredService<TimeProvider>(),
             options)));
-        // No monitoring storage yet (#151, slice 3). UseStorage takes it as optional exactly for a
-        // provider at this stage: everything except the dashboard works, and MapMillraceDashboard
-        // fails at startup rather than serving a blank page.
         return builder.UseStorage(
+            sp => sp.GetRequiredService<SqliteStorage>(),
             sp => sp.GetRequiredService<SqliteStorage>(),
             sp => sp.GetRequiredService<SqliteStorage>());
     }

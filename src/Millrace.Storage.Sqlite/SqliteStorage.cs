@@ -32,8 +32,10 @@ namespace Millrace.Storage.Sqlite;
 /// <para>
 /// <b>Types.</b> SQLite has no date, uuid or boolean storage classes, so timestamps are
 /// fixed-width UTC text, ids are canonical lowercase uuid text, and flags are integers. Both text
-/// encodings are chosen so that lexicographic order is the order the contract asks for — see
-/// <see cref="Timestamp(DateTimeOffset)"/> and <see cref="Id(Guid)"/>.
+/// encodings sort the way the contract needs their values to sort, which is what lets ordering and
+/// keyset paging happen in the database rather than in memory — see
+/// <see cref="Timestamp(DateTimeOffset)"/> and <see cref="Id(Guid)"/> for which part of each is
+/// load-bearing and which is merely tidy.
 /// </para>
 /// <para>
 /// Every <c>now</c> comparison uses the injected <see cref="TimeProvider"/>, never
@@ -41,7 +43,8 @@ namespace Millrace.Storage.Sqlite;
 /// clock exactly as it drives the in-memory one.
 /// </para>
 /// </remarks>
-public sealed class SqliteStorage : IJobStorage, IWorkflowStorage, IStorageNotifier, IAsyncDisposable
+public sealed partial class SqliteStorage
+    : IJobStorage, IWorkflowStorage, IStorageNotifier, Monitoring.IMonitoringStorage, IAsyncDisposable
 {
     private const string ActiveStates = "0, 1, 2, 4, 7"; // Scheduled, Enqueued, Processing, Failed, Awaiting
 
@@ -56,13 +59,26 @@ public sealed class SqliteStorage : IJobStorage, IWorkflowStorage, IStorageNotif
         "last_fire_time, created_at, updated_at";
 
     /// <summary>
-    /// Fixed-width UTC text, so lexicographic order is chronological order.
+    /// Fixed-width UTC text: one instant has exactly one encoding, and lexicographic order is
+    /// chronological order.
     /// </summary>
     /// <remarks>
-    /// Deliberately not the default <c>DateTimeOffset</c> mapping, which writes <c>FFFFFFF</c> — it
-    /// drops trailing zeros, so <c>…:00.5</c> and <c>…:00.4999999</c> have different widths and sort
-    /// the wrong way round. Every ordering the contract states (<c>DueAt ASC</c> activation, oldest
-    /// bookmark first) is a comparison on one of these columns, so the width has to be constant.
+    /// <para>
+    /// Every ordering the contract states (<c>DueAt ASC</c> activation, oldest bookmark first, the
+    /// keyset cursor's row-value comparison) is a comparison on one of these columns, and the
+    /// recurring fence matches one exactly. Both need the encoding to be a function of the instant
+    /// and to sort the way time does.
+    /// </para>
+    /// <para>
+    /// <b>Constant width is not what buys the ordering, though</b> — worth recording, because the
+    /// obvious argument for it is wrong. Dropping trailing zeros (what the default
+    /// <c>DateTimeOffset</c> mapping's <c>FFFFFFF</c> does) is prefix-preserving on a fixed-position
+    /// fraction, so it sorts correctly too: swapping this constant to <c>FFFFFFF</c> leaves all 126
+    /// conformance facts green, which was checked rather than assumed. What constant width actually
+    /// buys is that the stored form is unambiguous to anything that does not share this formatter — a
+    /// migration, an ad-hoc query, a future reader of the same file. That is a smaller claim than
+    /// "otherwise it sorts wrong", and it is the true one.
+    /// </para>
     /// </remarks>
     private const string TimeFormat = "yyyy-MM-dd HH:mm:ss.fffffff";
 
