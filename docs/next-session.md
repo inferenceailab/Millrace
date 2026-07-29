@@ -1,8 +1,8 @@
 # Picking this up again
 
 Written 2026-07-26 at the end of the session that closed milestone 0.5, rewritten on 2026-07-28 when
-the 1.0 milestone emptied, and extended on 2026-07-29 after the repository was hardened and the
-first dependency wave came through.
+the 1.0 milestone emptied, extended on 2026-07-29 after the repository was hardened and the first
+dependency wave came through, and again the same day after the SQLite provider shipped.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -13,9 +13,13 @@ Delete anything that stops being true.
 
 ## Start here
 
-**Millrace 1.0.0 is released.** Nine packages on nuget.org, the milestone is closed, and the
-storage and v1 REST contracts are now stable promises (§11.41) rather than working agreements.
-`v1.0.0-rc.1` went out first to exercise the publishing path; `v1.0.0` followed the same day.
+**Millrace 1.1.0 is released** — **ten** packages on nuget.org, the tenth being
+`Millrace.Storage.Sqlite`. `v1.1.0-rc.1` went out first and `v1.1.0` followed, both from the same
+commit.
+
+1.0.0 remains the version that matters: it is where the storage and v1 REST contracts became stable
+promises (§11.41) rather than working agreements. 1.1.0 is purely additive — no contract moved, which
+is why it is a minor.
 
 **That changes how this repository works, and it is the one thing to internalise before touching
 anything.** Until today, a bad decision could be corrected in the next commit. Now
@@ -46,8 +50,12 @@ shipping.
 Since then the repository itself was hardened (§11.42) and the first Dependabot wave was worked
 through — nine dependency and security pull requests, all closed or merged. Both are covered below.
 
+**Then the SQLite provider was built** ([#151](https://github.com/inferenceailab/Millrace/issues/151),
+four pull requests, #152–#154) and a flaky workflow test was fixed (#150). That is the section below
+worth reading first, because its result is a fact about the frozen contract rather than about SQLite.
+
 `main` builds clean, the whole suite passes, the docs deploy on every push, and **no issue and no
-pull request is open**. There is no backlog: the next session picks what 1.1 or 2.0 should be,
+pull request is open**. There is no backlog: the next session picks what 1.x or 2.0 should be,
 rather than finishing something.
 
 ## Nothing is blocking on a person
@@ -56,21 +64,78 @@ Publishing credentials were the last blocker and they are done, proven by three 
 than by configuration looking right. GitHub Pages needed enabling once and now is. Nothing waits on
 anyone.
 
-What *does* want a person is direction: with 1.0 out and no backlog, the next decision is what 1.x
-is for. The obvious candidate is the SQLite provider, because it is the cheapest test of whether the
-contract just frozen is actually finished — but that is a judgement about priorities, not a task
-waiting to be picked up.
+What *does* want a person is direction. The SQLite provider was the obvious candidate and it is done,
+so that answer is spent — the next session picks what 1.x is for from a genuinely empty board.
 
 The one standing commitment is **monthly dependency pull requests**, which are not a backlog but are
 not nothing either; the first wave took a session's tail to work through. See below.
 
+## The SQLite provider, and what it proved
+
+Four pull requests, sliced schema+jobs+workflows → monitoring → packaging. Worth reading even if you
+never touch SQLite, because the reason it was built was to interrogate §11.41.
+
+**The frozen contract holds, unchanged.** All 126 conformance facts pass against a provider with no
+server, one writer and no `SKIP LOCKED` — no suppressions, no provider-specific skips, nothing that
+needed a 2.0 conversation or a §11.14-shaped side interface. §11.41 shipped 1.0 knowing the storage
+contract "may not be finished being learned from" and named a third provider as the cheapest way to
+find out. It was, and the answer was yes.
+
+**Claims serialise instead of skipping locks.** Every mutating path opens `BEGIN IMMEDIATE` and takes
+SQLite's single writer lock up front, so a second claimer waits rather than stepping over. The
+contract only asks that two claims never return the same job, so this conforms — what it costs is
+throughput under a high `MaxParallelism`, which is the point to move to PostgreSQL. That line is
+load-bearing and was measured, not assumed: flipping to `deferred: true` fails exactly the seven
+concurrency facts, each burning the full `busy_timeout` on a lock-upgrade deadlock, while the other
+75 stay green.
+
+**The same lock deleted work.** The PostgreSQL provider resolves an idempotency conflict by
+inserting, losing, looking up the holder, and retrying when the holder went terminal in the
+read-committed window between the two. Under a writer lock a plain look-then-insert is already
+atomic, so neither that retry loop nor the parent row lock exists in the SQLite provider. Worth
+remembering when reading the two side by side: the difference is not sloppiness.
+
+**Three things SQLite could not copy**, all documented in the code where they happen: no
+`NULLS NOT DISTINCT` (the idempotency index leads with `tenant_id IS NULL` so a null tenant collides
+with another null tenant but not with a tenant literally named `''`); no data-modifying CTEs (the
+claim decomposes into several statements inside the transaction); and no `LATERAL` (the recurring
+last-outcome lookup became two correlated subqueries, safe only because the ordering key ends in a
+unique id and so names exactly one row).
+
+**The smoke test now runs a durable provider.** It opens a store, enqueues, closes the provider,
+reopens over the same file and claims the job back. That is the only check anywhere exercising a
+durable provider from a *package* rather than the source tree — the SQL providers need a server, so
+their suites cannot — and it covers a class nothing else could see: `SQLitePCLRaw` ships a native
+library, and a package that failed to declare it would restore cleanly and throw on the first query.
+Verified by pointing the reopen at a different file and watching it fail.
+
+**Adding SQLite surfaced a security advisory for free.** `Microsoft.Data.Sqlite` 10.0.10 resolves
+`SQLitePCLRaw.lib.e_sqlite3` 2.1.11, which carries GHSA-2m69-gcr7-jv3q (high). Restore *failed
+outright* rather than warning, so it was impossible to miss; pinned to 2.1.12 via the transitive
+pinning already enabled for the `Microsoft.OpenApi` case. There is now a second such pin to retire
+when upstream catches up — see the dependency section.
+
+**There is no strictness policy for SQLite and there cannot be.** The other two providers fail rather
+than skip when no database is reachable, and §11.42 credits that for making the `Microsoft.Data.SqlClient`
+7.0 bump safe to accept on evidence. SQLite is a file, always reachable, so the policy would assert
+nothing. **A green SQLite run therefore carries less weight than a green PostgreSQL run** — for the
+others, whether the suite ran at all was the part in doubt. This is written into the harness doc
+comment so the two are not read as equivalent.
+
 ## Releasing
 
-**It works, and it has now run twice.** `v0.1.0-alpha.1` put eight packages on nuget.org on
-2026-07-26; `v1.0.0-rc.1` put **nine** there on 2026-07-28, first attempt again. Tag `vX.Y.Z` and
-the rest is automatic: pack, smoke-test the built artifacts, exchange a GitHub OIDC token for a
-one-hour nuget.org key (§11.33), push, create the GitHub release. No secret is stored, so nothing
-expires and nothing needs rotating.
+**It works, and it has now run four times.** `v0.1.0-alpha.1` put eight packages on nuget.org on
+2026-07-26; `v1.0.0-rc.1` and `v1.0.0` put **nine** there on 2026-07-28; `v1.1.0-rc.1` and `v1.1.0`
+put **ten** there on 2026-07-29, first attempt each time. Tag `vX.Y.Z` and the rest is automatic:
+pack, smoke-test the built artifacts, exchange a GitHub OIDC token for a one-hour nuget.org key
+(§11.33), push, create the GitHub release. No secret is stored, so nothing expires and nothing needs
+rotating.
+
+**A new package needs no workflow change.** 1.1.0 was the first release to publish a package that had
+never existed, and it required editing nothing: `release.yml` packs the solution and pushes
+`artifacts/*.nupkg`, so the tenth arrived through the glob. What a new package *does* need is
+`<IsPackable>true</IsPackable>` — it was deliberately left false while the provider was incomplete,
+precisely so an unplanned tag could not ship it early.
 
 Three things to know before the next tag.
 
@@ -87,10 +152,18 @@ tags. `docs.yml` (§11.39) is the shape of the fix — build on pull requests, d
 — and `release.yml` cannot copy it exactly, because it publishes somewhere with no delete. A
 prerelease tag is the same idea at the cost of a version number, and it is the habit to keep.
 
-**Verify the published packages, not just the green job.** After both tags all nine were confirmed
-indexed on nuget.org and then installed into a throwaway console app that enqueued a job — about two
-minutes, and the only thing that actually proves a consumer can use what shipped. `dotnet nuget
-push` reporting success means the bytes were accepted, not that they work.
+**Verify the published packages, not just the green job.** After every tag so far, all packages were
+confirmed indexed on nuget.org and then installed into a throwaway console app that ran real work —
+about two minutes, and the only thing that actually proves a consumer can use what shipped. `dotnet
+nuget push` reporting success means the bytes were accepted, not that they work. For 1.1.0 that meant
+enqueueing a job through `Millrace.Storage.Sqlite`, closing the provider, reopening it and claiming
+the job back, which also exercises the native `SQLitePCLRaw` dependency resolving from a package
+rather than a project reference.
+
+**The indexing lag is real and it is not uniform.** Minutes after the 1.1.0 push, the flat container
+listed 1.1.0 for two of the ten packages and not the other eight; a few minutes later, all ten. So a
+partial answer is a *timing* observation, not a failed publish — do not start diagnosing until the
+same check has been repeated.
 
 Two traps in that verification, both hit on 1.0.0. **nuget.org has two indexes**: the flat container
 (package content) publishes within a few minutes, and the registration index that `dotnet add
@@ -103,7 +176,14 @@ concluding anything.
 **Documentation ships inside the packages, so it lands *before* the tag.**
 `Directory.Build.targets` packs the repository root `README.md` into every package. Tagging 1.0.0
 with "Status: alpha" still in it would have embedded that in nine packages permanently — nuget.org
-has no delete. Any future version bump needs the same ordering: docs merged, then tag.
+has no delete. Any future version bump needs the same ordering: docs merged, then tag. 1.1.0 followed
+it: the README's package table and status note were merged in the packaging pull request, before the
+tag existed.
+
+That ordering has a sharp edge worth naming. Between merging the README and cutting the tag, the
+README on `main` describes a package nobody can install yet. The 1.1.0 wording handled it by saying
+the provider "ships with the next release" **without naming a version** — accurate in both windows,
+and it makes no promise about which release, which is not a README's decision to make.
 
 **The trust policy is pinned to the repository and to the file name `release.yml`.** Renaming or
 moving that file breaks publishing, which is the trade §11.33 made deliberately: authority belongs
@@ -141,11 +221,17 @@ that answers the question. **Check what applies to the branch, not what the rule
 Two things were weighed and accepted rather than overlooked. Both are more expensive to change today
 than they were yesterday, which is exactly why they are written down.
 
-- **The storage contract may not be finished being learned from.** It grew clause 7 in §11.16 and
-  the compensation-recovery surface in §11.30, both discovered by *building on it*. Only two
-  providers plus the in-memory one have ever exercised it. **A third is the cheapest way to find
-  out**, and SQLite was already next on the roadmap. If it finds a gap, that gap is now a 2.0
-  conversation or a new interface (§11.14's shape), not an edit.
+- **The storage contract may not be finished being learned from.** ~~Only two providers plus the
+  in-memory one have ever exercised it. A third is the cheapest way to find out.~~ **Settled, and the
+  answer was yes.** SQLite implements it unchanged: 126 facts, no suppressions, no skips, no gap that
+  needed a 2.0 conversation or a §11.14-shaped side interface. That is the strongest evidence the
+  frozen contract is actually finished, because SQLite is the provider least like the two it was
+  designed against — no server, one writer, no `SKIP LOCKED`.
+
+  Two caveats on how far that generalises. It is still three *relational* providers; a document or
+  key-value store would test different clauses (the fenced compare-and-set and the recursive cancel
+  cascade are the two that assume a lot). And "no gap" means the conformance kit found none — the kit
+  is the definition of supported, but it is also the thing a gap would have to be visible to.
 - **`Millrace.Storage.Verification` still suppresses `CS1591`** (§11.34) for its ~110 `[Fact]`
   methods. It is the package a community provider author reads, and it is the one with undocumented
   public members. 1.0 does not make that worse — it makes it visible to more people.
@@ -187,7 +273,20 @@ benchmark numbers in #49: the measurement was wrong in a way the output looked f
 breaking a link on purpose and watching it exit 1. Worth the sixty seconds every time — the test
 that asserted a 200 on `{prefix}/ui` passed for months while the page was blank (§11.38).
 
-**Tests that drive the real worker share its scheduler — this has now bitten three times**, in three
+**A confident comment is not a checked claim, and they are hard to tell apart.** Building the SQLite
+provider produced two comments of identical shape, each asserting that a text encoding was
+load-bearing for ordering. One was true and covered by a real test:
+`Consume_breaks_created_at_ties_by_id` asserts the bookmark tie-break in RFC 4122 byte order, which
+canonical lowercase uuid text sorts in, and it is the fact that caught the PostgreSQL/SQL Server
+divergence. The other was **false**: fixed-width timestamps were said to be necessary because
+trailing-zero stripping would sort `…00.5` after `…00.4999999`. It does not — stripping trailing zeros
+is prefix-preserving on a fixed-position fraction, so the variable-width form sorts correctly too, and
+swapping the constant leaves all 126 facts green. It was found by trying to falsify the claim, and
+only because the sibling claim invited the same test. Fixed width is still right, for the smaller
+reason that the stored form should be unambiguous to anything not sharing the formatter. **The habit
+worth keeping: when you write "otherwise X breaks", go break it.**
+
+**Tests that drive the real worker share its scheduler — this has now bitten four times**, in four
 different ways:
 
 - Polling too tightly starves the worker through the storage lock.
@@ -199,10 +298,28 @@ different ways:
   `An_instance_pinned_to_an_unregistered_version_fails_loudly` did exactly that and was green on the
   pull request, green locally, and red on Linux `main`. The fix was to stop running a worker the
   test never needed.
+- **A worker parked on a wakeup signal never looks again on a frozen fake clock.** `WaitForWorkAsync`
+  waits on two things — a storage signal and `Task.Delay(pollDelay, time)` as the ceiling — and
+  `IStorageNotifier` documents the signal as droppable, so the delay is the only *guaranteed*
+  re-look. A clock nothing advances switches that guarantee off, and any missed signal hangs the test
+  to the deadline. `A_delay_defers_the_rest_of_the_flow_until_it_comes_due` did this on a docs-only
+  commit (#150). Three of five `Eventually.ObservedAsync` call sites advanced the clock by hand and
+  two did not, so the clock is now a **required parameter** the helper advances — the gap is
+  unrepresentable rather than remembered.
 
 **Diagnose these by reproducing them.** Enabling the worker and inserting a 750ms delay between the
 read and the write reproduced CI's exact exception locally; disabling the worker with the same delay
 passed. That pins the cause instead of correlating with it.
+
+**But say so when you could not reproduce it.** #150's diagnosis rests on the notifier contract and
+the worker's wait path, *not* on a caught failure: 40 runs of the test alone and 5 of the full suite
+were clean on a fast Windows box against a two-core Linux runner with four suites in parallel. The
+first repro attempt also inserted its delay on the wrong side of the race, widening the window that
+made the bug *less* likely and passing for the wrong reason. Later, running the whole solution's
+suites together on a pre-#150 branch did produce one intermittent failure in `Millrace.Tests` — clean
+on four subsequent runs, and the test name was not captured, so it is consistent with the flake and
+not proof of it. **The condition that matters is whole-solution load, not a loop over one suite**; if
+this recurs on `main`, that is where to start.
 
 **"Works on my machine" caused every real defect last session**, without exception:
 - `@angular/cli` was never declared as a dependency; `npx` had fetched it locally, so it built here
@@ -275,6 +392,13 @@ whatever the package defaulted to. Expect any library that deprecates on a minor
 immediately produced another pull request for two packages the first one missed. Do not assume the
 queue is empty because you emptied it.
 
+**Two transitive pins are now waiting on upstream**, both in `Directory.Packages.props` with a
+comment saying when to remove them: `Microsoft.OpenApi` 2.7.5 (CVE-2026-49451, waiting on ASP.NET
+Core) and `SQLitePCLRaw.lib.e_sqlite3` 2.1.12 (GHSA-2m69-gcr7-jv3q, waiting on
+`Microsoft.Data.Sqlite` to resolve it itself). A pin that outlives its advisory is a version floor
+nobody chose, so check both when a dependency wave lands rather than only reading the new pull
+requests.
+
 **A shipping major deserves more than a green tick — but the strictness policy supplies it.**
 `Microsoft.Data.SqlClient` went 6.1.4 → 7.0.2, and that one *ships*, inside
 `Millrace.Storage.SqlServer`. Its breaking changes turned out to be .NET Framework assembly-identity
@@ -287,7 +411,12 @@ so a green Test step is proof the conformance suite really ran against the new d
 Worth knowing before deciding whether to keep paying for them.
 
 - **The conformance kit** repeatedly caught provider divergence, and once caught a bug in its own
-  spec when a second provider disagreed (§11 SQL Server byte ordering).
+  spec when a second provider disagreed (§11 SQL Server byte ordering). It has now done the larger
+  job it was built for: a third provider, shaped unlike the other two, was declared supported on
+  evidence rather than on review. **Nobody read the SQLite provider's SQL** — 126 executable facts
+  did, and they were shown to discriminate rather than merely pass (see `BeginImmediate`). That is
+  the difference between a suite and a rubber stamp, and it is why a community provider is a
+  realistic proposition.
 - **The contract parity check** (§11.22) found that the React UI had shipped without any management
   actions at all, and now fails the build when a contract endpoint no UI reaches.
 - **The wire-format tests** (§11.24) found enum values serializing as integers — which had silently
@@ -299,6 +428,12 @@ Worth knowing before deciding whether to keep paying for them.
   — turned out to do a second job nobody designed it for. It is what made a major bump of the SQL
   Server driver safe to accept on evidence rather than on optimism, because a green run *cannot* mean
   the suite was skipped.
+- **Warnings-as-errors on restore, specifically.** Adding one package reference surfaced a
+  high-severity advisory in a *native* transitive dependency and refused to restore at all. A warning
+  would have scrolled past in a session that was reading test output, not restore output.
+- **The package smoke test**, which now runs a durable provider end to end out of a `.nupkg`. Every
+  other check in the repository verifies the source tree; this one verifies the artifact, and SQLite
+  is the first provider it could actually run.
 
 Each of those was invisible to every other test in the repo.
 
