@@ -411,9 +411,13 @@ belongs to `inferenceailab`; the corporate `u297954_lhgroup` is an Enterprise Ma
 write here. The trap is that **it reads fine** — `gh pr list`, `gh pr view` and `gh pr checks` all
 work under it, so nothing warns you until a mutation is refused with
 `GraphQL: Unauthorized: As an Enterprise Managed User, you cannot access this content
-(mergePullRequest)`. That message names the PR and means the account. `gh auth switch --user
-inferenceailab` fixes it, and it has drifted back at least twice, so check `gh auth status` before
-the first write of a session rather than after the first failure.
+(mergePullRequest)`. That message names the PR and means the account. `git push` fails separately and
+differently, with `Permission to inferenceailab/Millrace.git denied to u297954_lhgroup` — same cause.
+
+`gh auth switch --user inferenceailab` fixes both, but **it does not stay fixed**: on 2026-07-30 it
+reverted twice inside a single session, roughly fifteen minutes apart, with nothing in between that
+touched authentication. So this is not a once-per-session check. Treat any 403 or `Unauthorized` from
+git or `gh` as this first, before believing anything about repository permissions.
 
 **`docs/backlog.md` is generated and nothing generates it.** It went two days stale without anything
 noticing: #151 closed on 2026-07-29 and the mirror still listed it open until it was regenerated on
