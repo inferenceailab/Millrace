@@ -1,9 +1,9 @@
 # Backlog
 
-> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-28 by `scripts/generate-backlog.ps1`.
+> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-30 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
-**63 done · 5 open** (of which 0 blocked on an unresolved spike).
+**64 done · 6 open** (of which 0 blocked on an unresolved spike).
 
 ## Epics
 
@@ -122,3 +122,5 @@ Hardening, Blazor UI, docs site, benchmarks vs Hangfire/WorkflowCore. Proves: cr
 | [#87](https://github.com/inferenceailab/Millrace/issues/87) | Flaky: A_delay_defers_the_rest_of_the_flow_until_it_comes_due fails under parallel suite load |  | done |
 | [#89](https://github.com/inferenceailab/Millrace/issues/89) | Enum values serialize as integers; every UI declares them as strings |  | done |
 | [#126](https://github.com/inferenceailab/Millrace/issues/126) | Execute the UI bundles in a browser before they ship | dashboard | done |
+| [#151](https://github.com/inferenceailab/Millrace/issues/151) | SQLite storage provider | storage | done |
+| [#157](https://github.com/inferenceailab/Millrace/issues/157) | Benchmark warmup does not cover the enqueue scenario, so its first repeats are cold | docs | open |
