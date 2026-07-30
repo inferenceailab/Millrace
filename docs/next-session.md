@@ -2,7 +2,8 @@
 
 Written 2026-07-26 at the end of the session that closed milestone 0.5, rewritten on 2026-07-28 when
 the 1.0 milestone emptied, extended on 2026-07-29 after the repository was hardened and the first
-dependency wave came through, and again the same day after the SQLite provider shipped.
+dependency wave came through, again the same day after the SQLite provider shipped, and on
+2026-07-30 after the benchmarks were re-measured against 1.1.0.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -54,9 +55,16 @@ through — nine dependency and security pull requests, all closed or merged. Bo
 four pull requests, #152–#154) and a flaky workflow test was fixed (#150). That is the section below
 worth reading first, because its result is a fact about the frozen contract rather than about SQLite.
 
-`main` builds clean, the whole suite passes, the docs deploy on every push, and **no issue and no
-pull request is open**. There is no backlog: the next session picks what 1.x or 2.0 should be,
-rather than finishing something.
+**Then the benchmarks were re-measured against 1.1.0** ([#156](https://github.com/inferenceailab/Millrace/pull/156)),
+which is the first time the harness has run since #49 published the table. It has its own section
+below, and the short version is that it reproduced — but the useful half was learning which parts of
+the old claim were about Millrace and which were about a developer workstation.
+
+`main` builds clean, the whole suite passes, the docs deploy on every push, and **no pull request is
+open**. Exactly one issue is: [#157](https://github.com/inferenceailab/Millrace/issues/157), a gap in
+the benchmark harness's warmup that the re-measurement found in itself. It is an afternoon's work and
+not a direction — the next session still picks what 1.x or 2.0 should be rather than finishing
+something.
 
 ## Nothing is blocking on a person
 
@@ -65,7 +73,8 @@ than by configuration looking right. GitHub Pages needed enabling once and now i
 anyone.
 
 What *does* want a person is direction. The SQLite provider was the obvious candidate and it is done,
-so that answer is spent — the next session picks what 1.x is for from a genuinely empty board.
+so that answer is spent. #157 is the only thing on the board and it is harness maintenance — picking
+it up is not the same as having decided what 1.x is for.
 
 The one standing commitment is **monthly dependency pull requests**, which are not a backlog but are
 not nothing either; the first wave took a session's tail to work through. See below.
@@ -121,6 +130,45 @@ than skip when no database is reachable, and §11.42 credits that for making the
 nothing. **A green SQLite run therefore carries less weight than a green PostgreSQL run** — for the
 others, whether the suite ran at all was the part in doubt. This is written into the harness doc
 comment so the two are not read as equivalent.
+
+## The benchmarks, re-measured
+
+The harness had not run since #49 published the table, and this file's closing line said the cheapest
+way to find out whether the numbers still held was to run it before believing them. That has now
+happened, so here is what it cost and what it changed.
+
+**It reproduced, and the ratios are the part that reproduced.** On the job scenarios every ratio
+landed inside the harness's own 10% noise floor: enqueue 1.78× → 1.86×, drain 3.36× → 3.23× matched
+and 3.19× → 3.11× default. Nothing in the published claim had to be withdrawn.
+
+**Every absolute number improved on every system, and none of it is code.** Two of the three
+comparands did not change version — Hangfire 1.8.24 gained 14–22% and WorkflowCore 3.18.0 gained 4%
+on byte-identical code. The previous session had found some process retrying a connection to the
+benchmark port every two seconds throughout, and a uniform lift across three libraries is what that
+looks like when it stops. **So the absolutes measure the machine, and only the ratios survive a change
+of machine.** Read the table that way, and do not quote a jobs/s figure without the box it came from.
+
+**Two ratios moved, and both moved toward honesty.** Latency *narrowed*: the published 2.5–5× is
+really 1.9–3.2×, because Millrace sat flat at ~6.8 ms while Hangfire improved from 34 ms to 22 ms.
+Millrace's figure looks floor-bound on a notification round trip; Hangfire's was polling-bound and
+therefore noise-sensitive, so the original multiple was inflated by the noise the re-run removed and
+the smaller number is the one to quote. Workflow *widened* to 6.4×, but mostly through startup falling
+4,435 ms to 3,466 ms against a comparand whose run is startup-dominated — not the engine executing
+steps 6.4× faster. A widening ratio deserves the same suspicion as a flattering absolute.
+
+**The re-run found a bug in the harness, in the harness's own output.** Millrace's enqueue spread was
+21%, the widest cell in the table, and it turned out to be runs 1 and 2 being cold: the warmup
+exercises *drain*, which seeds a backlog and therefore only partly pays for the enqueue path. That is
+[#157](https://github.com/inferenceailab/Millrace/issues/157). It moved the published median by 0.8%,
+which is §11.37's claim for the median demonstrated on an accident rather than asserted — but the
+spread column exists so a reader can judge whether a difference is real, and a cell reading 21% for a
+harness artefact spends that column's credibility on nothing.
+
+**Practicalities for whoever runs it next.** It is **34 minutes**, not the twenty the method section
+used to claim, and there were zero stalls across 108 runs. Method rule 6 said three runs while the
+tables said nine; the rule was wrong and `--repeats 9` is now in the reproduction command so it
+produces what is published. Do a one-minute sanity run first — the harness never executes in CI, so
+the first thing to establish is that it still starts.
 
 ## Releasing
 
@@ -348,10 +396,31 @@ the way through the work, and a warmup small enough that every first run looked 
 steady state. None of them looked wrong in the output; all three were found by asking why a number
 was *better* than expected. Suspect the flattering result first.
 
+The 2026-07-30 re-run is the same lesson from the other side: every absolute improved, including for
+two comparands whose code had not changed a byte. Nothing was wrong with the code and nothing was
+wrong with the harness — the machine was quieter. See the benchmark section above before quoting any
+absolute figure from `benchmarks.md`.
+
 **`gh pr edit` does not work on this repository.** It fails with a Projects-classic GraphQL error
 because it fetches project cards on the way past. `gh pr create` and `gh pr merge` are fine; editing
 a title or body needs `gh api repos/inferenceailab/Millrace/pulls/<n> -X PATCH --input <file>`. And
 `jq` is not installed on the development machine, so build the payload with `node -e` instead.
+
+**`gh` has two accounts logged in and the wrong one is active by default.** Work on this repository
+belongs to `inferenceailab`; the corporate `u297954_lhgroup` is an Enterprise Managed User and cannot
+write here. The trap is that **it reads fine** — `gh pr list`, `gh pr view` and `gh pr checks` all
+work under it, so nothing warns you until a mutation is refused with
+`GraphQL: Unauthorized: As an Enterprise Managed User, you cannot access this content
+(mergePullRequest)`. That message names the PR and means the account. `gh auth switch --user
+inferenceailab` fixes it, and it has drifted back at least twice, so check `gh auth status` before
+the first write of a session rather than after the first failure.
+
+**`docs/backlog.md` is generated and nothing generates it.** It went two days stale without anything
+noticing: #151 closed on 2026-07-29 and the mirror still listed it open until it was regenerated on
+2026-07-30 (#158). CLAUDE.md calls it a generated file, which reads like a guarantee and is actually
+an instruction to a person — there is no CI step and no hook. Run `pwsh ./scripts/generate-backlog.ps1`
+whenever you open or close an issue. Making the docs job regenerate it and fail on a diff would turn
+the instruction into a check, and is the obvious cheap fix if this drifts again.
 
 **A suppression hides more than what it was added for.** `CS1591` was suppressed so packaging could
 proceed, and it swallowed 52 warnings that were not about missing documentation at all: the SDK's
@@ -478,7 +547,16 @@ And from the docs site (§11.39), too new to have earned anything but worth watc
   workflow that installs no Node means anything reintroducing the dependency fails the job. It
   passed on a real runner, which is a stronger statement than it passing here.
 
-One that has not earned anything yet: **the benchmark harness only runs when someone runs it.** It
-compiles in CI and never executes there, so it will rot the way any unexecuted code does. The
-question in a few months is whether the numbers in `benchmarks.md` still reproduce, and the cheapest
-way to find out is to run it before believing the table.
+**The benchmark harness only runs when someone runs it** — and on 2026-07-30 someone did, which is
+the first evidence either way. It had not executed since #49. It still ran, 108 runs with zero
+stalls, and it reproduced every job-scenario ratio inside its own noise floor. So the rot the last
+version of this paragraph feared did not happen in four days, which is worth exactly as much as that
+sounds.
+
+What it *earned* is more interesting than that it still works. It caught a real defect in itself
+(#157) that was visible only in its own spread column, and it separated the numbers that were about
+Millrace from the numbers that were about a quiet machine — a distinction no amount of re-reading the
+table could have produced. Both required running it.
+
+The standing question is unchanged and now has a cadence: it compiles in CI and never executes there,
+so run it before believing the table, and expect the absolutes to have moved even when nothing did.
