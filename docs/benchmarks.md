@@ -26,8 +26,14 @@ publishing. `--help` lists the knobs; [`bench/README.md`](../bench/README.md) co
 at a time.
 
 Worth one sanity run first — `--scenario drain --system millrace --jobs 500 --repeats 1` finishes in
-under a minute. The harness compiles in CI but never executes there, so it is the kind of code that
-rots quietly, and a small run is the cheapest way to find out before committing half an hour.
+under a minute, and tells you the harness still starts before you commit half an hour to it.
+
+CI now runs a fuller version of that on every push: all four scenarios at the smallest sizes that
+still exercise each one, Millrace only, against a PostgreSQL service container. It takes about half
+a minute and it is **not** a measurement — 500 jobs on a shared runner measures the runner, and no
+number it prints belongs in this document. What it removes is the older problem: the harness used to
+compile in CI and never execute there, so between #49 publishing this table and #156 re-running it
+four months later, whether the thing still worked was nobody's knowledge.
 
 ## The numbers
 

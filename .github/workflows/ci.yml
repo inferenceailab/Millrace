@@ -81,6 +81,58 @@ jobs:
           MILLRACE_REQUIRE_BROWSER: 'true'
         run: dotnet test test/Millrace.Dashboard.BrowserTests/Millrace.Dashboard.BrowserTests.csproj --no-build --configuration Release --verbosity normal
 
+  # The benchmark harness compiled in CI and never executed there — four months passed between #49
+  # publishing the table and #156 running it again, and "does it still work" was unanswerable for
+  # all of them. docs/benchmarks.md already told a reader to do a small run before trusting the
+  # harness; this is that instruction as a job.
+  #
+  # It is not a measurement and its numbers must not reach docs/benchmarks.md. 500 jobs on a shared
+  # runner measures the runner. What it proves is that the harness starts, connects, seeds, drains,
+  # times, aggregates and exits 0.
+  #
+  # All four scenarios rather than the drain-only sanity run a human does, because the point is
+  # rot: the latency scenario has a PeriodicTimer and percentile code that drain never touches, and
+  # workflow has its own engine path. Drain alone would leave three quarters of the harness
+  # unexecuted, which is the situation this job exists to end. Sizes are the smallest that still
+  # exercise each path — about half a minute in total.
+  #
+  # Millrace only. Hangfire and WorkflowCore are third-party comparands; whether *their* packages
+  # still work is not what this is guarding.
+  bench-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      # Matches bench/docker-compose.yml, including the port, so the harness's own default
+      # connection string is what gets exercised rather than a CI-only override. The tuning flags
+      # the compose file sets are deliberately absent: they exist to stop any comparand being
+      # advantaged in a real measurement, and this is not one.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: millrace
+          POSTGRES_PASSWORD: millrace
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U millrace"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      # No setup-node, on purpose. The harness references Millrace and the PostgreSQL provider and
+      # nothing else, so no UI bundle is in its graph — and if one ever is, this job fails rather
+      # than quietly growing a Node dependency, the same way the docs job guards the same claim.
+      - name: Sanity run
+        run: >-
+          dotnet run -c Release --project bench/Millrace.Benchmarks --
+          --system millrace --jobs 500 --instances 100 --rate 50 --seconds 3 --repeats 1
+
   # Packing on every push, not only on a tag: the failures packaging introduces — a dependency the
   # solution supplied by project reference, an embedded resource that did not survive pack — are
   # invisible to the build and test jobs, and finding them at release time means finding them under
