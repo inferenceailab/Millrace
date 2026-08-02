@@ -10,6 +10,8 @@
   href: providers.md
 - name: Writing a provider
   href: writing-a-provider.md
+- name: Conformance facts
+  href: conformance-facts.md
 - name: Dashboard
   href: dashboard.md
 - name: Testing your jobs
