@@ -640,11 +640,17 @@ And from the docs site (§11.39), too new to have earned anything but worth watc
   workflow that installs no Node means anything reintroducing the dependency fails the job. It
   passed on a real runner, which is a stronger statement than it passing here.
 
-**The benchmark harness only runs when someone runs it** — and on 2026-07-30 someone did, which is
-the first evidence either way. It had not executed since #49. It still ran, 108 runs with zero
-stalls, and it reproduced every job-scenario ratio inside its own noise floor. So the rot the last
-version of this paragraph feared did not happen in four days, which is worth exactly as much as that
-sounds.
+**The benchmark harness used to run only when someone ran it** — and on 2026-07-30 someone did,
+which was the first evidence either way. It had not executed since #49. It still ran, 108 runs with
+zero stalls, and it reproduced every job-scenario ratio inside its own noise floor.
+
+**Since 2026-08-02 a CI job runs it on every push**, so that gap cannot reopen. All four scenarios at
+the smallest sizes that exercise each — about half a minute, Millrace only, against a PostgreSQL
+service container. Drain alone would have been cheaper and was rejected: the latency scenario has a
+`PeriodicTimer` and percentile code drain never touches, and workflow has its own engine path, so a
+drain-only job would have left three quarters of the harness in exactly the state this was meant to
+end. **Its numbers are not measurements** and must not reach `benchmarks.md` — 500 jobs on a shared
+runner measures the runner.
 
 What it *earned* is more interesting than that it still works. It separated the numbers that were
 about Millrace from the numbers that were about a quiet machine — a distinction no amount of
@@ -656,5 +662,7 @@ the number, and testing it on 2026-08-02 found nothing there (see the benchmark 
 spread column did its job, which is to flag a run worth looking at. Reading a cause out of it was
 the part nobody checked.
 
-The standing question is unchanged and now has a cadence: it compiles in CI and never executes there,
-so run it before believing the table, and expect the absolutes to have moved even when nothing did.
+The standing question has narrowed rather than gone. CI now proves the harness *runs*; it says
+nothing about whether the published table is still true, because a 500-job run on a shared runner
+cannot. So: run it properly before believing the table, and expect the absolutes to have moved even
+when nothing did.
