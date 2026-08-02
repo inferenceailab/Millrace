@@ -450,19 +450,34 @@ reverted twice inside a single session, roughly fifteen minutes apart, with noth
 touched authentication. So this is not a once-per-session check. Treat any 403 or `Unauthorized` from
 git or `gh` as this first, before believing anything about repository permissions.
 
-**`docs/backlog.md` is generated and nothing generates it.** It went two days stale without anything
-noticing: #151 closed on 2026-07-29 and the mirror still listed it open until it was regenerated on
-2026-07-30 (#158). CLAUDE.md calls it a generated file, which reads like a guarantee and is actually
-an instruction to a person — there is no CI step and no hook. Run `pwsh ./scripts/generate-backlog.ps1`
-whenever you open or close an issue. Making the docs job regenerate it and fail on a diff would turn
-the instruction into a check, and is the obvious cheap fix if this drifts again.
+**`docs/backlog.md` was generated with nothing generating it — that is now a check.** It went two
+days stale without anything noticing: #151 closed on 2026-07-29 and the mirror still listed it open
+until it was regenerated on 2026-07-30 (#158). CLAUDE.md called it a generated file, which read like
+a guarantee and was an instruction to a person.
 
-**That cheap fix has a snag, found by doing half of it.** The generator stamps the generation date
-into the file's header line, so regenerating an *unchanged* backlog still produces a one-line diff —
-a job that failed on any diff would go red on every unrelated push and be switched off within a
-week. Regenerated on 2026-08-02 and that date was the only line that moved, which is both the
-evidence the mirror is in sync and the reason the naive check does not work. Either the check
-compares the body below the header, or the generator stops stamping a date nobody asked it for.
+**Closed on 2026-08-02.** The docs job runs `generate-backlog.ps1 -Check`, which renders to memory
+and compares against the file, failing with the offending line numbers and the command that fixes
+it. Two things had to be dealt with first, and between them they are why it had not been done
+already:
+
+- **The generator stamped the generation date into the header**, so regenerating an *unchanged*
+  backlog still produced a one-line diff, and a fail-on-any-diff job would have gone red on every
+  unrelated push. The stamp is gone. The header now points at
+  `git log -1 --format=%cd docs/backlog.md`, which cannot be wrong the way a written date can.
+- **Line endings would have failed it on the runner and nowhere else.** There is no `.gitattributes`
+  and `core.autocrlf` is on, so the working tree is CRLF here and LF on Linux, while
+  `StringBuilder.AppendLine` follows `Environment.NewLine`. The check normalises both sides before
+  comparing. A checker that fails for a reason invisible in its own output is worse than no checker.
+
+**It was verified by breaking it**, per the rule further down this section: a row flipped from `done`
+to `open` fails with that line quoted against what it should say, a truncated file fails naming the
+first missing line, and the restored file passes.
+
+**Know what it couples.** The mirror tracks GitHub issues rather than the working tree, so closing an
+issue can turn red a pull request that never touched a file. That is intended — whoever changes
+issues is who should re-render — but it is the failure mode to watch, because a check that fails for
+something you did not do is the kind that gets switched off. If that starts happening, moving it to a
+`main`-only push is the retreat; deleting it is not.
 
 **A suppression hides more than what it was added for.** `CS1591` was suppressed so packaging could
 proceed, and it swallowed 52 warnings that were not about missing documentation at all: the SDK's

@@ -1,7 +1,8 @@
 # Backlog
 
-> **Generated file — do not edit.** Rendered from GitHub issues on 2026-08-02 by `scripts/generate-backlog.ps1`.
+> **Generated file — do not edit.** Rendered from GitHub issues by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
+> For when it was last rendered, ask git: `git log -1 --format=%cd docs/backlog.md`.
 
 **70 done · 0 open** (of which 0 blocked on an unresolved spike).
 

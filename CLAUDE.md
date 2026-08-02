@@ -24,7 +24,10 @@
 - Milestones, epics and user stories live in GitHub: Issues + Milestones + project board
   [#1](https://github.com/users/inferenceailab/projects/1). That is the source of truth.
 - `docs/backlog.md` is a **generated mirror** for offline reading and diff review. Change the
-  issues, then regenerate the mirror — never hand-edit it.
+  issues, then run `pwsh ./scripts/generate-backlog.ps1` — never hand-edit it. The docs workflow
+  runs the same script with `-Check` and fails when the mirror is stale, so this is enforced rather
+  than remembered. It reads GitHub, not the working tree, so closing an issue can turn an unrelated
+  pull request red; regenerating is the fix and the failure output says so.
 - Design questions that must be settled before code go in `docs/open-questions.md` and get a
   `type:spike` issue. Once answered, the answer moves into `ARCHITECTURE.md` §11 and the entry
   leaves the open-questions doc.

@@ -6,9 +6,11 @@ on:
   pull_request:
     branches: [main]
 
-# Pages deployment needs these; the build job below runs without them on a pull request.
+# Pages deployment needs pages/id-token; the build job below runs without them on a pull request.
+# issues:read is for the backlog mirror check, which asks GitHub what the issues actually say.
 permissions:
   contents: read
+  issues: read
   pages: write
   id-token: write
 
@@ -50,6 +52,20 @@ jobs:
       - name: Check internal links
         shell: pwsh
         run: ./scripts/check-docs-links.ps1 -Site docs/site/_site
+
+      # CLAUDE.md calls docs/backlog.md a generated file, which reads like a guarantee and was an
+      # instruction to a person — nothing regenerated it and it went two days stale in July without
+      # anything noticing. This is the guarantee.
+      #
+      # Note what it couples: the mirror tracks GitHub issues, not this repository's contents, so
+      # closing an issue can turn a pull request red that never touched a file. That is intended —
+      # the person changing issues is the one who should re-render — and the fix is one command,
+      # named in the failure output.
+      - name: Check the backlog mirror is current
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/generate-backlog.ps1 -Check
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
