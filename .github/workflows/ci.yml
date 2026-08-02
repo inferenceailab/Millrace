@@ -92,6 +92,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Before packing, not after: a transitive pin is a version floor this repository imposes on
+      # everyone who installs these packages, and the condition for removing it used to live in a
+      # code comment — which made it a thing to remember during a dependency wave. It fails the
+      # build when a pin has stopped doing anything, because a floor nobody chose is exactly the
+      # kind of thing that survives by being nobody's job.
+      #
+      # Needs the network and nothing else, so it runs first and costs seconds.
+      - name: Check transitive pins are still needed
+        shell: pwsh
+        run: ./scripts/check-transitive-pins.ps1
+
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x

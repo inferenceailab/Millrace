@@ -543,23 +543,24 @@ missed the benchmark-only one. Each is in `Directory.Packages.props` with a comm
 remove it: `Microsoft.OpenApi` 2.7.5 (CVE-2026-49451, waiting on ASP.NET Core),
 `SQLitePCLRaw.lib.e_sqlite3` 2.1.12 (GHSA-2m69-gcr7-jv3q, waiting on `Microsoft.Data.Sqlite` to
 resolve it itself) and `OpenTelemetry.Api` 1.17.0 (GHSA-g94r-2vxg-569j, waiting on WorkflowCore,
-under `Benchmark comparands`). A pin that outlives its advisory is a version floor nobody chose, so
-check all three when a dependency wave lands rather than only reading the new pull requests.
+under `Benchmark comparands`). A pin that outlives its advisory is a version floor nobody chose.
 
-**Checked on 2026-08-02: all three still needed, and it took two minutes.** Ask the *parent's own
-nuspec* what it declares — `https://api.nuget.org/v3-flatcontainer/<id>/<version>/<id>.nuspec` — and
-not the absence of a Dependabot pull request, which only tells you nothing newer was published.
-`Microsoft.Data.Sqlite` 10.0.10 still declares `SQLitePCLRaw.bundle_e_sqlite3` 2.1.11,
-`Microsoft.AspNetCore.OpenApi` 10.0.10 still declares `Microsoft.OpenApi` 2.0.0, and WorkflowCore
-3.18.0 still declares `OpenTelemetry.Api` 1.12.0; none of the three parents has a newer stable
-release at all.
+**You no longer have to remember to check them.** `scripts/check-transitive-pins.ps1` runs in the
+`pack` job and fails the build once a pin stops doing anything. It walks the chain each pin
+overrides — `Microsoft.Data.Sqlite` → `SQLitePCLRaw.bundle_e_sqlite3` → `SQLitePCLRaw.lib.e_sqlite3`,
+and the two shorter ones — asking each link's own nuspec what it declares, which is the question the
+absence of a Dependabot pull request does not answer. Only the *relationships* are written down;
+every version comes from `Directory.Packages.props` or nuget.org, so a bump of a root package is
+picked up without editing the script. It was verified by lowering a pin below what its chain
+supplies and watching it fail.
 
-Two things that check makes visible. **The pins sit at the lowest fixed version, not the latest** —
-`Microsoft.OpenApi` is at 3.9.0 upstream against a pin of 2.7.5, and
-`SQLitePCLRaw.lib.e_sqlite3` at 3.53.3 against 2.1.12. That is deliberate and worth not
-"tidying": the pin exists to clear an advisory, and raising it further is a floor nobody chose in the
-other direction. And **the retirement condition is a version comparison, not a judgement call**, so
-it is a candidate for automating the day this gets tedious.
+Two things it makes visible that are worth not "tidying". **The pins sit at the lowest fixed version,
+not the latest** — `Microsoft.OpenApi` is at 3.9.0 upstream against a pin of 2.7.5, and
+`SQLitePCLRaw.lib.e_sqlite3` at 3.53.3 against 2.1.12. That is deliberate: the pin exists to clear an
+advisory, and raising it further is a floor nobody chose in the other direction. And **the check is
+deliberately asymmetric** — it computes a *lower bound* on what would resolve without the pin, so it
+can prove a pin is redundant but never that one is required. That is the right way round for
+something that blocks a build.
 
 **A shipping major deserves more than a green tick — but the strictness policy supplies it.**
 `Microsoft.Data.SqlClient` went 6.1.4 → 7.0.2, and that one *ships*, inside

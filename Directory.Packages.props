@@ -3,7 +3,13 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- Lets a PackageVersion below pin a dependency we do not reference directly, which is how
-         the Microsoft.OpenApi advisory is dealt with without waiting on an upstream release. -->
+         the Microsoft.OpenApi advisory is dealt with without waiting on an upstream release.
+
+         Every such pin is a version floor imposed on everyone who installs these packages, so each
+         one below says when to remove it. That condition is checked rather than remembered:
+         scripts/check-transitive-pins.ps1 walks the chain each pin overrides and fails the build
+         once upstream supplies the patched version by itself. Adding or removing a pin means
+         updating the table in that script — it will tell you if you forget. -->
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
