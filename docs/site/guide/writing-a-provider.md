@@ -12,6 +12,10 @@ The important thing about this page: **you do not have to read the contract care
 The requirements ship as an executable conformance kit. Reference the package, implement one
 interface, and run the suite — what "supported" means is "passes the suite".
 
+If you want to see the size of the job before starting, [Conformance facts](conformance-facts.md)
+lists every one of them. That page is generated from the suites themselves, so it cannot drift from
+what your run will actually check.
+
 ## Start with the kit, not the implementation
 
 ```bash

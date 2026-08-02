@@ -311,12 +311,25 @@ than they were yesterday, which is exactly why they are written down.
   key-value store would test different clauses (the fenced compare-and-set and the recursive cancel
   cascade are the two that assume a lot). And "no gap" means the conformance kit found none — the kit
   is the definition of supported, but it is also the thing a gap would have to be visible to.
-- **`Millrace.Storage.Verification` still suppresses `CS1591`** (§11.34) for its ~110 `[Fact]`
+- ~~**`Millrace.Storage.Verification` still suppresses `CS1591`** (§11.34) for its ~110 `[Fact]`
   methods. It is the package a community provider author reads, and it is the one with undocumented
-  public members. 1.0 does not make that worse — it makes it visible to more people.
+  public members.~~ **Examined on 2026-08-02 and it is not a gap.** The suppression was removed
+  temporarily and the warnings categorised: 110 unique members, and *every one* is a test method.
+  Nothing a provider author implements or calls is undocumented — `IStorageHarness`,
+  `CreateHarnessAsync`, `Epoch`, `NewTime` and the rest all carry summaries that explain rather than
+  restate. Documenting the remaining 110 would produce 110 restatements of names that are already
+  sentences, which is the "comments written to satisfy a compiler" outcome §11.34 worried about out
+  loud. The csproj's reasoning was right and the count in it was right; this entry was the thing
+  that was wrong.
 
-Neither is a defect. Both are the kind of thing that is obvious in hindsight and invisible in a
-changelog.
+  What *was* missing is that nothing published those sentences, so "what does conformance require?"
+  meant opening the source. `docs/site/guide/conformance-facts.md` now renders all 110 from the
+  suites, generated and checked.
+
+The first is not a defect — it is the kind of thing that is obvious in hindsight and invisible in a
+changelog. The second turned out not to be anything, which is worth remembering the next time this
+file lists something as accepted: an entry here is a claim like any other, and this one had never
+been measured.
 
 ## Things that will bite you
 

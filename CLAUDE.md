@@ -18,6 +18,11 @@
   packages never need Node — keep it that way, and `scripts/smoke-test-packages.ps1` is what proves
   it.
 - The UI bundle is generated, never committed. Change `ui/src`, not `ui/dist`.
+- `docs/site/guide/conformance-facts.md` is generated from the conformance suites by
+  `scripts/generate-conformance-facts.ps1` — never hand-edit it. Add, rename or remove a fact and
+  re-run it; the docs workflow runs the same script with `-Check` and fails otherwise. A fact typed
+  onto the page that no suite asserts is rejected, which is what lets the page be read as the
+  specification rather than as a snapshot of one.
 
 ## Planning
 

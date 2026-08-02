@@ -67,6 +67,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/generate-backlog.ps1 -Check
 
+      # The conformance facts page is the kit's own method names, rendered. Unlike the backlog it
+      # depends only on this repository's sources, so it fails exactly when someone adds, renames or
+      # removes a fact without re-rendering — which is the whole reason it can be trusted as a
+      # specification rather than a snapshot of one.
+      - name: Check the conformance facts page is current
+        shell: pwsh
+        run: ./scripts/generate-conformance-facts.ps1 -Check
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: docs/site/_site
