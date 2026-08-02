@@ -4,7 +4,8 @@ Written 2026-07-26 at the end of the session that closed milestone 0.5, rewritte
 the 1.0 milestone emptied, extended on 2026-07-29 after the repository was hardened and the first
 dependency wave came through, again the same day after the SQLite provider shipped, on
 2026-07-30 after the benchmarks were re-measured against 1.1.0, and on 2026-08-02 after August's
-dependency wave was cleared.
+dependency wave was cleared and the benchmark section's explanation of its own widest spread turned
+out to be wrong.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -64,9 +65,10 @@ the old claim were about Millrace and which were about a developer workstation.
 `main` builds clean, the whole suite passes, the docs deploy on every push, and **no pull request is
 open** — August's dependency wave arrived on 2026-08-01 and was merged the next day, which cost ten
 minutes rather than July's session tail (see below). Exactly one issue is:
-[#157](https://github.com/inferenceailab/Millrace/issues/157), a gap in
-the benchmark harness's warmup that the re-measurement found in itself. It is an afternoon's work and
-not a direction — the next session still picks what 1.x or 2.0 should be rather than finishing
+[#157](https://github.com/inferenceailab/Millrace/issues/157), which started as a gap in the
+benchmark harness's warmup and turned out to be a wrong explanation published in `benchmarks.md`
+instead — the correction is the work, and it is an hour rather than an afternoon. It is not a
+direction either way: the next session still picks what 1.x or 2.0 should be rather than finishing
 something.
 
 ## Nothing is blocking on a person
@@ -76,8 +78,8 @@ than by configuration looking right. GitHub Pages needed enabling once and now i
 anyone.
 
 What *does* want a person is direction. The SQLite provider was the obvious candidate and it is done,
-so that answer is spent. #157 is the only thing on the board and it is harness maintenance — picking
-it up is not the same as having decided what 1.x is for.
+so that answer is spent. #157 is the only thing on the board and it is a documentation correction —
+picking it up is not the same as having decided what 1.x is for.
 
 The one standing commitment is **monthly dependency pull requests**, which are not a backlog but are
 not nothing either; the first wave took a session's tail to work through. See below.
@@ -159,13 +161,29 @@ the smaller number is the one to quote. Workflow *widened* to 6.4×, but mostly 
 4,435 ms to 3,466 ms against a comparand whose run is startup-dominated — not the engine executing
 steps 6.4× faster. A widening ratio deserves the same suspicion as a flattering absolute.
 
-**The re-run found a bug in the harness, in the harness's own output.** Millrace's enqueue spread was
-21%, the widest cell in the table, and it turned out to be runs 1 and 2 being cold: the warmup
-exercises *drain*, which seeds a backlog and therefore only partly pays for the enqueue path. That is
-[#157](https://github.com/inferenceailab/Millrace/issues/157). It moved the published median by 0.8%,
-which is §11.37's claim for the median demonstrated on an accident rather than asserted — but the
-spread column exists so a reader can judge whether a difference is real, and a cell reading 21% for a
-harness artefact spends that column's credibility on nothing.
+**The re-run found a 21% cell and invented a cause for it — and the invented cause is the more
+useful finding.** Millrace's enqueue spread was 21%, the widest cell in the table, with runs 1 and 2
+the two lowest of nine. That was written up, in `benchmarks.md` and here, as a gap in the warmup:
+the warmup exercises *drain*, which seeds a backlog and therefore only partly pays for the enqueue
+path. It reads well. Nobody tested it.
+
+**Tested on 2026-08-02, it is wrong** ([#157](https://github.com/inferenceailab/Millrace/issues/157),
+now re-scoped to correcting the claim). Building the warmup it implies changes nothing: on a settled
+machine the *unmodified* harness already produces an 8% enqueue spread with runs 1 and 2 mid-band,
+and adding the warmup leaves it at 8%. The low repeats also refuse to stay at the front — across four
+runs they landed on 2 and 8, then 6–9, then nowhere — and a warmup gap is front-loaded every time by
+construction. The premise misread the harness besides: `DrainThroughputAsync` seeds through the same
+`EnqueueAsync` call at full size with workers stopped, so the enqueue path was already warm.
+
+So the 21% is what the document's own "Reading the spread" section says a spread is: an un-isolated
+machine, Docker cold-started for that run, one draw where the low pair happened to land first. The
+0.8% median shift stands and is still §11.37's claim demonstrated on an accident — it just was not
+the accident anyone named.
+
+**Read this as a warning about the shape of the mistake, not about benchmarks.** The number was
+measured and the explanation beside it was not, and in the finished prose the two were
+indistinguishable. That is the same failure as the false encoding comment recorded further down, and
+the same fix applies: go break it.
 
 **Practicalities for whoever runs it next.** It is **34 minutes**, not the twenty the method section
 used to claim, and there were zero stalls across 108 runs. Method rule 6 said three runs while the
@@ -603,10 +621,15 @@ stalls, and it reproduced every job-scenario ratio inside its own noise floor. S
 version of this paragraph feared did not happen in four days, which is worth exactly as much as that
 sounds.
 
-What it *earned* is more interesting than that it still works. It caught a real defect in itself
-(#157) that was visible only in its own spread column, and it separated the numbers that were about
-Millrace from the numbers that were about a quiet machine — a distinction no amount of re-reading the
-table could have produced. Both required running it.
+What it *earned* is more interesting than that it still works. It separated the numbers that were
+about Millrace from the numbers that were about a quiet machine — a distinction no amount of
+re-reading the table could have produced, and one that required running it.
+
+It was also credited here with catching "a real defect in itself" — the 21% enqueue cell, #157.
+**That credit has been withdrawn.** The harness surfaced a number; the defect was a story told about
+the number, and testing it on 2026-08-02 found nothing there (see the benchmark section above). The
+spread column did its job, which is to flag a run worth looking at. Reading a cause out of it was
+the part nobody checked.
 
 The standing question is unchanged and now has a cadence: it compiles in CI and never executes there,
 so run it before believing the table, and expect the absolutes to have moved even when nothing did.
