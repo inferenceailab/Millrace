@@ -260,30 +260,64 @@ rather than as a number.
 The previous run's control agreed to 0.4%; this one to 0.05%. Two runs is not a trend, but it is at
 least not evidence that the control is luck.
 
-### The widest spread has a cause, and it is the harness
+### The widest spread is noise, and the cause this section used to name was wrong
 
-Millrace's enqueue spread is 21%, the widest cell in the table. It is not a wide distribution — it is
-the first two repeats being cold:
+Millrace's enqueue spread is 21%, the widest cell in the table:
 
 ```
 1,541  1,439  1,777  1,739  1,789  1,756  1,763  1,807  1,792
 ```
 
-Runs 3–9 sit in a 4% band; runs 1 and 2 are the two lowest of the nine. The warmup exercises the
-*drain* scenario, which seeds a backlog and therefore only partly pays for the enqueue path — so the
-enqueue scenario is still warming during its own first repeats.
+Runs 3–9 sit in a 4% band and runs 1 and 2 are the two lowest of the nine. Until 2026-08-02 this
+section explained that as a gap in the warmup — the warmup exercises *drain*, which seeds a backlog
+and therefore only partly pays for the enqueue path, leaving the enqueue scenario still warming
+during its own first repeats. **That explanation was published without being tested. It has now been
+tested, and it is wrong** ([#157](https://github.com/inferenceailab/Millrace/issues/157)).
 
-**Two things follow, and the second is the point.** It is a real gap in the warmup, worth closing
-before the next publication. And it barely moved the published figure: the median of runs 3–9 alone is
-1,777/s against the published 1,763/s, a 0.8% difference across a 21% spread. That is the median doing
-exactly the job §11.37 claims for it, demonstrated on an accident rather than asserted.
+**The warmup it implies was built and measured, and it changes nothing.** Four runs of
+`--scenario enqueue --repeats 9`, Millrace matched, back to back on one machine:
 
-Hangfire's enqueue does not show the pattern — its low repeat is run 5, not runs 1–2 — so this is
-specific to Millrace's write path rather than to the harness's ordering in general.
+| Harness | Container | Spread |
+|---|---|--:|
+| unmodified | cold | 42% |
+| unmodified | warm | **8%** |
+| with the missing enqueue warmup added | warm | **8%** |
+| unmodified | cold restart | 47% |
+
+On a settled machine the *unmodified* harness already produces an 8% enqueue spread, with runs 1 and
+2 mid-band. Adding the warmup leaves it at 8% and moves the median 2.7%, inside the noise floor. And
+the low repeats do not sit at the start: across those runs they landed on runs 2 and 8, then on 6–9,
+then nowhere in particular. A warmup gap produces a front-loaded deficit *every time* by
+construction. This does not.
+
+The premise also misread the harness. `DrainThroughputAsync` seeds its backlog through the same
+`EnqueueAsync` call the enqueue scenario uses, at full `--jobs` size and with workers stopped — so
+the enqueue path was already warm. Only the state left behind differs, a consumed backlog rather
+than a pending one, and that is worth less than the noise floor.
+
+**So the 21% means what the section above it says a spread means.** The machine was not isolated and
+Docker was cold-started for this run, and a cold container is where the 40%+ spreads in that table
+come from. Runs 1 and 2 being the low pair is one draw from that distribution rather than a property
+of the harness. Hangfire's low repeat landing on run 5 was read as evidence the effect was specific
+to Millrace's write path; under the noise reading it is just another position, which explains both
+systems with one mechanism instead of two.
+
+**What survives is the half that was always the point.** The median of runs 3–9 alone is 1,777/s
+against the published 1,763/s — a 0.8% difference across a 21% spread. That is §11.37's claim for the
+median demonstrated on an accident rather than asserted, and it holds whatever caused the accident.
+
+**The lesson is one this document keeps relearning.** A number was measured, an explanation was
+attached to it in the same breath, and only the number had been checked — for three days the
+explanation read exactly like the measurement it sat next to. The habit that catches this is already
+written down in `docs/next-session.md`: when you write "otherwise X breaks", go break it. Nobody
+tried to remove this mechanism until someone did, and then it turned out not to be holding anything
+up.
 
 Reproducing this on a genuinely quiet machine should tighten the spreads further and should not move
 the ratios. If it moves a *ratio* substantially, that is worth an issue; a moved absolute is worth a
-shrug, as this run demonstrates.
+shrug, as this run demonstrates. Repeated suites on an isolated machine showing runs 1–2 as the two
+lowest of nine would revive the warmup diagnosis — one such run is what produced it in the first
+place, which is why one is not enough.
 
 ## If a run stalls
 
