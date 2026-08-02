@@ -1,6 +1,6 @@
 # Backlog
 
-> **Generated file — do not edit.** Rendered from GitHub issues on 2026-07-30 by `scripts/generate-backlog.ps1`.
+> **Generated file — do not edit.** Rendered from GitHub issues on 2026-08-02 by `scripts/generate-backlog.ps1`.
 > The source of truth is the [project board](https://github.com/users/inferenceailab/projects/1) and the repository issues.
 
 **64 done · 6 open** (of which 0 blocked on an unresolved spike).
