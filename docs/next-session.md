@@ -4,8 +4,8 @@ Written 2026-07-26 at the end of the session that closed milestone 0.5, rewritte
 the 1.0 milestone emptied, extended on 2026-07-29 after the repository was hardened and the first
 dependency wave came through, again the same day after the SQLite provider shipped, on
 2026-07-30 after the benchmarks were re-measured against 1.1.0, and on 2026-08-02 after August's
-dependency wave was cleared and the benchmark section's explanation of its own widest spread turned
-out to be wrong.
+dependency wave was cleared, the benchmark section's explanation of its own widest spread turned out
+to be wrong, and the board emptied.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -64,12 +64,11 @@ the old claim were about Millrace and which were about a developer workstation.
 
 `main` builds clean, the whole suite passes, the docs deploy on every push, and **no pull request is
 open** — August's dependency wave arrived on 2026-08-01 and was merged the next day, which cost ten
-minutes rather than July's session tail (see below). Exactly one issue is:
-[#157](https://github.com/inferenceailab/Millrace/issues/157), which started as a gap in the
-benchmark harness's warmup and turned out to be a wrong explanation published in `benchmarks.md`
-instead — the correction is the work, and it is an hour rather than an afternoon. It is not a
-direction either way: the next session still picks what 1.x or 2.0 should be rather than finishing
-something.
+minutes rather than July's session tail (see below). **No issue is open either, which has not been
+true before.** [#157](https://github.com/inferenceailab/Millrace/issues/157) started as a gap in the
+benchmark harness's warmup, turned out to be a wrong explanation published in `benchmarks.md`, and
+was corrected and closed on 2026-08-02; the five layer epics closed the same day. So the board is
+empty, and there is nothing left to pick up instead of deciding what 1.x or 2.0 is for.
 
 ## Nothing is blocking on a person
 
@@ -78,8 +77,19 @@ than by configuration looking right. GitHub Pages needed enabling once and now i
 anyone.
 
 What *does* want a person is direction. The SQLite provider was the obvious candidate and it is done,
-so that answer is spent. #157 is the only thing on the board and it is a documentation correction —
-picking it up is not the same as having decided what 1.x is for.
+so that answer is spent.
+
+**The board is now empty too.** The five layer epics ([#1](https://github.com/inferenceailab/Millrace/issues/1)–[#5](https://github.com/inferenceailab/Millrace/issues/5))
+were closed on 2026-08-02: every story under all five had shipped, and they were open by neglect
+rather than by design — created 2026-07-25 and never edited since, no checklists, no sub-issues. Each
+carries a closing comment mapping what it covered to the milestone that delivered it, so the trail
+survives the closure rather than living in a table nobody kept.
+
+That removes the last thing that could be picked up *instead* of choosing. The nearest thing to a
+named candidate is the one §11.41 names against itself: three relational providers is still one shape
+of provider, and a document or key-value store would stress the clauses none of them do — the fenced
+compare-and-set and the recursive cancel cascade assume a lot. That is a suggestion, not a decision,
+and it wants a fresh epic argued on its own terms rather than #1 reopened.
 
 The one standing commitment is **monthly dependency pull requests**, which are not a backlog but are
 not nothing either; the first wave took a session's tail to work through. See below.
