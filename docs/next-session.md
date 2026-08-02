@@ -2,8 +2,9 @@
 
 Written 2026-07-26 at the end of the session that closed milestone 0.5, rewritten on 2026-07-28 when
 the 1.0 milestone emptied, extended on 2026-07-29 after the repository was hardened and the first
-dependency wave came through, again the same day after the SQLite provider shipped, and on
-2026-07-30 after the benchmarks were re-measured against 1.1.0.
+dependency wave came through, again the same day after the SQLite provider shipped, on
+2026-07-30 after the benchmarks were re-measured against 1.1.0, and on 2026-08-02 after August's
+dependency wave was cleared.
 
 **This file is not a backlog.** The work lives in [GitHub issues](https://github.com/inferenceailab/Millrace/issues)
 and the [project board](https://github.com/users/inferenceailab/projects/1), mirrored for offline
@@ -61,7 +62,9 @@ below, and the short version is that it reproduced — but the useful half was l
 the old claim were about Millrace and which were about a developer workstation.
 
 `main` builds clean, the whole suite passes, the docs deploy on every push, and **no pull request is
-open**. Exactly one issue is: [#157](https://github.com/inferenceailab/Millrace/issues/157), a gap in
+open** — August's dependency wave arrived on 2026-08-01 and was merged the next day, which cost ten
+minutes rather than July's session tail (see below). Exactly one issue is:
+[#157](https://github.com/inferenceailab/Millrace/issues/157), a gap in
 the benchmark harness's warmup that the re-measurement found in itself. It is an afternoon's work and
 not a direction — the next session still picks what 1.x or 2.0 should be rather than finishing
 something.
@@ -426,6 +429,13 @@ an instruction to a person — there is no CI step and no hook. Run `pwsh ./scri
 whenever you open or close an issue. Making the docs job regenerate it and fail on a diff would turn
 the instruction into a check, and is the obvious cheap fix if this drifts again.
 
+**That cheap fix has a snag, found by doing half of it.** The generator stamps the generation date
+into the file's header line, so regenerating an *unchanged* backlog still produces a one-line diff —
+a job that failed on any diff would go red on every unrelated push and be switched off within a
+week. Regenerated on 2026-08-02 and that date was the only line that moved, which is both the
+evidence the mirror is in sync and the reason the naive check does not work. Either the check
+compares the body below the header, or the generator stops stamping a date nobody asked it for.
+
 **A suppression hides more than what it was added for.** `CS1591` was suppressed so packaging could
 proceed, and it swallowed 52 warnings that were not about missing documentation at all: the SDK's
 default `**/*.cs` glob had been reaching into `node_modules`, compiling node-gyp's
@@ -441,8 +451,27 @@ named on the tin.
 ## Dependency updates, monthly from now on
 
 `.github/dependabot.yml` groups GitHub Actions, NuGet and both npm trees on a monthly schedule. The
-first wave landed on 2026-07-29 — six pull requests — and cost more than expected, so here is what
-it taught.
+first wave landed on 2026-07-29 — six pull requests — and cost more than expected. August's landed
+on 2026-08-01 and cost nothing. Both are worth knowing about, because the difference between them is
+the thing to budget for.
+
+**The August wave was two patch bumps and no code change**: `Microsoft.Extensions.Hosting`
+10.0.0 → 10.0.10 ([#161](https://github.com/inferenceailab/Millrace/pull/161)) and
+`@angular/build` + `@angular/cli` 22.0.8 → 22.0.9
+([#160](https://github.com/inferenceailab/Millrace/pull/160)), both green on every check, both merged
+on 2026-08-02. So July's cost was about **grouped majors**, not about the monthly cadence — a wave
+with no major in it is a ten-minute job. Budget a session's tail for the wave that contains a major,
+not for every wave.
+
+**One of the two read more alarming than it was, and the reason generalises.**
+`Microsoft.Extensions.Hosting` 10.0.0 → 10.0.10 sits in the same file as the comment arguing to hold
+`Microsoft.Extensions.*` at 10.0.0 — but that argument is about the *shipping* floor
+(`Microsoft.AspNetCore.Components.WebAssembly`, and what raising it would do to consumers of the core
+package), while this entry is in the `Testing` ItemGroup and is referenced only by
+`test/Millrace.Tests` and `bench/Millrace.Benchmarks`. Same version number, same file, opposite
+consequences. **Check which ItemGroup a bumped version lives in before reading it against a comment
+about a different one** — `Directory.Packages.props` is labelled by group precisely so this is
+answerable, and the answer took one `grep` of the `.csproj` references.
 
 **Grouping `patterns: ['*']` bundles unrelated majors, and one broken member holds the rest
 hostage.** The React group arrived as vite 8 + `@vitejs/plugin-react` 6 + TypeScript 7 in a single
@@ -461,16 +490,33 @@ the parameterless `PostgreSqlBuilder()`/`MsSqlBuilder()`, and the bump would not
 name their image in the constructor — which the SQL Server suite never did, so it had been inheriting
 whatever the package defaulted to. Expect any library that deprecates on a minor to do this here.
 
-**Dependabot re-runs and produces a second wave.** Merging the `microsoft-extensions` group
+**Dependabot re-runs and produces a follow-up.** Merging the `microsoft-extensions` group
 immediately produced another pull request for two packages the first one missed. Do not assume the
-queue is empty because you emptied it.
+queue is empty because you emptied it. August produced no follow-up — but that was checked minutes
+after the merge, which is not long enough to mean much, so the habit stands.
 
-**Two transitive pins are now waiting on upstream**, both in `Directory.Packages.props` with a
-comment saying when to remove them: `Microsoft.OpenApi` 2.7.5 (CVE-2026-49451, waiting on ASP.NET
-Core) and `SQLitePCLRaw.lib.e_sqlite3` 2.1.12 (GHSA-2m69-gcr7-jv3q, waiting on
-`Microsoft.Data.Sqlite` to resolve it itself). A pin that outlives its advisory is a version floor
-nobody chose, so check both when a dependency wave lands rather than only reading the new pull
-requests.
+**Three transitive pins are waiting on upstream** — the previous version of this line said two, and
+missed the benchmark-only one. Each is in `Directory.Packages.props` with a comment saying when to
+remove it: `Microsoft.OpenApi` 2.7.5 (CVE-2026-49451, waiting on ASP.NET Core),
+`SQLitePCLRaw.lib.e_sqlite3` 2.1.12 (GHSA-2m69-gcr7-jv3q, waiting on `Microsoft.Data.Sqlite` to
+resolve it itself) and `OpenTelemetry.Api` 1.17.0 (GHSA-g94r-2vxg-569j, waiting on WorkflowCore,
+under `Benchmark comparands`). A pin that outlives its advisory is a version floor nobody chose, so
+check all three when a dependency wave lands rather than only reading the new pull requests.
+
+**Checked on 2026-08-02: all three still needed, and it took two minutes.** Ask the *parent's own
+nuspec* what it declares — `https://api.nuget.org/v3-flatcontainer/<id>/<version>/<id>.nuspec` — and
+not the absence of a Dependabot pull request, which only tells you nothing newer was published.
+`Microsoft.Data.Sqlite` 10.0.10 still declares `SQLitePCLRaw.bundle_e_sqlite3` 2.1.11,
+`Microsoft.AspNetCore.OpenApi` 10.0.10 still declares `Microsoft.OpenApi` 2.0.0, and WorkflowCore
+3.18.0 still declares `OpenTelemetry.Api` 1.12.0; none of the three parents has a newer stable
+release at all.
+
+Two things that check makes visible. **The pins sit at the lowest fixed version, not the latest** —
+`Microsoft.OpenApi` is at 3.9.0 upstream against a pin of 2.7.5, and
+`SQLitePCLRaw.lib.e_sqlite3` at 3.53.3 against 2.1.12. That is deliberate and worth not
+"tidying": the pin exists to clear an advisory, and raising it further is a floor nobody chose in the
+other direction. And **the retirement condition is a version comparison, not a judgement call**, so
+it is a candidate for automating the day this gets tedious.
 
 **A shipping major deserves more than a green tick — but the strictness policy supplies it.**
 `Microsoft.Data.SqlClient` went 6.1.4 → 7.0.2, and that one *ships*, inside
