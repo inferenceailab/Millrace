@@ -43,6 +43,7 @@
          GHSA-v5pm-xwqc-g5wc); 2.7.5 is the lowest fixed version. Remove this pin once ASP.NET Core
          ships a patched dependency of its own. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Provider testing">
