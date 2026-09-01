@@ -56,8 +56,8 @@
     table, so a number can be traced to what produced it.
   -->
   <ItemGroup Label="Benchmark comparands">
-    <PackageVersion Include="Hangfire.Core" Version="1.8.24" />
-    <PackageVersion Include="Hangfire.NetCore" Version="1.8.24" />
+    <PackageVersion Include="Hangfire.Core" Version="1.8.25" />
+    <PackageVersion Include="Hangfire.NetCore" Version="1.8.25" />
     <PackageVersion Include="Hangfire.PostgreSql" Version="1.21.1" />
     <PackageVersion Include="WorkflowCore" Version="3.18.0" />
     <PackageVersion Include="WorkflowCore.Persistence.PostgreSQL" Version="3.18.0" />
